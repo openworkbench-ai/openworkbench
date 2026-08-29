@@ -1,0 +1,17 @@
+{
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "auth": "api_key",
+      "baseUrl": "https://openrouter.ai/api/v1"
+    }
+  ],
+  "models": [
+    {
+      "provider": "openrouter",
+      "id": "z-ai/glm-5.3-flash",
+      "name": "GLM 5.3 Flash (OpenRouter)"
+    }
+  ]
+}

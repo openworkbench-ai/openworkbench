@@ -1,14 +1,11 @@
 import {
   createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
   ModelRuntime,
   SessionManager,
-  SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentBackend } from "../agent-backend.js";
 import type { Capabilities } from "../app-loader.js";
-import { createMcpProxyTool } from "../mcp-tools.js";
+import { createCapabilityProvider } from "./pi-capabilities.js";
 
 const MODEL_PROVIDER = "openrouter";
 const MODEL_ID = "z-ai/glm-5.3-flash";
@@ -29,18 +26,7 @@ export async function createPiAgentBackend(
   await modelRuntime.setRuntimeApiKey(MODEL_PROVIDER, apiKey);
   const model = modelRuntime.getModel(MODEL_PROVIDER, MODEL_ID);
 
-  const cwd = process.cwd();
-  const agentDir = getAgentDir();
-  const resourceLoader = new DefaultResourceLoader({
-    cwd,
-    agentDir,
-    settingsManager: SettingsManager.create(cwd, agentDir),
-    additionalSkillPaths: capabilities.skillPaths,
-  });
-  await resourceLoader.reload();
-
-  const mcpProxyTool = await createMcpProxyTool(capabilities.mcpServers);
-  const customTools = mcpProxyTool ? [mcpProxyTool] : [];
+  const { resourceLoader, tools: customTools } = await createCapabilityProvider(capabilities);
 
   const { session } = await createAgentSession({
     sessionManager: SessionManager.inMemory(),

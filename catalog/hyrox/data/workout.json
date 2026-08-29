@@ -1,0 +1,27 @@
+[
+  {
+    "$key": "aerobic_workout",
+    "plan": "$plan.foundation_plan",
+    "name": "Aerobic Base Session"
+  },
+  {
+    "$key": "carry_workout",
+    "plan": "$plan.foundation_plan",
+    "name": "Carry & Core"
+  },
+  {
+    "$key": "full_sim_workout",
+    "plan": "$plan.prep_plan",
+    "name": "Week 1 Full Simulation"
+  },
+  {
+    "$key": "circuit_a_workout",
+    "plan": "$plan.prep_plan",
+    "name": "Station Circuit A"
+  },
+  {
+    "$key": "circuit_b_workout",
+    "plan": "$plan.prep_plan",
+    "name": "Station Circuit B"
+  }
+]

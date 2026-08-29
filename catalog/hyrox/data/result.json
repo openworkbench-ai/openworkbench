@@ -1,0 +1,17 @@
+[
+  {
+    "exercise": "$exercise.aerobic_run",
+    "duration_seconds": 1752,
+    "notes": "Steady aerobic pace, felt comfortable throughout."
+  },
+  {
+    "exercise": "$exercise.sled_push_tech",
+    "duration_seconds": 288,
+    "notes": "Technique holding up well under load."
+  },
+  {
+    "exercise": "$exercise.row_tt",
+    "duration_seconds": 235,
+    "notes": "Faster than target, strong finish."
+  }
+]

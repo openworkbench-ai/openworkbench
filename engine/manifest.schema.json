@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pocketknife.local/manifest.schema.json",
+  "title": "Pocketknife App Manifest",
+  "description": "The canonical, declarative contract for a Pocketknife app. One immutable document per app version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["app", "entities"],
+  "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "type": "string", "minLength": 1 },
+        "emoji": { "type": "string" },
+        "color": { "type": "string" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "frontend": { "$ref": "#/$defs/frontend" },
+    "functions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/function" }
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "steps"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "description": { "type": "string" },
+        "params": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/field" }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/toolStep" }
+        }
+      }
+    },
+    "toolStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entity"],
+      "properties": {
+        "id": { "$ref": "#/$defs/machineName" },
+        "op": { "enum": ["create", "read", "update", "delete", "list"] },
+        "entity": { "$ref": "#/$defs/stableId" },
+        "rowId": {
+          "description": "A row id template: a literal id string, or a \"$params.<name>\"/\"$steps.<id>.<field>\" reference. Required for read/update/delete, forbidden for create/list."
+        },
+        "set": {
+          "type": "object",
+          "description": "Field name -> template value (literal JSON, or a \"$params.<name>\"/\"$steps.<id>.<field>\" reference string). Used by create/update steps."
+        },
+        "filter": {
+          "type": "object",
+          "description": "Field name -> template value (literal JSON, or a \"$params.<name>\"/\"$steps.<id>.<field>\" reference string) that field must equal, AND-combined across entries. Only valid for list steps."
+        }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dist"],
+      "properties": {
+        "dist": { "type": "string", "minLength": 1 },
+        "entry": { "type": "string", "minLength": 1 }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "entry", "capabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "entry": { "type": "string", "minLength": 1 },
+        "capabilities": { "$ref": "#/$defs/capabilities" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataScope" }
+        },
+        "network": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/hostname" }
+        },
+        "model": { "type": "boolean" }
+      }
+    },
+    "dataScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "operations"],
+      "properties": {
+        "entity": { "$ref": "#/$defs/stableId" },
+        "operations": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "enum": ["create", "read", "update", "delete"] }
+        }
+      }
+    },
+    "hostname": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+    },
+    "stableId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "machineName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "fields"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "operations": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "enum": ["create", "read", "update", "delete"] }
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/field" }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "oneOf": [
+        { "$ref": "#/$defs/field_text" },
+        { "$ref": "#/$defs/field_integer" },
+        { "$ref": "#/$defs/field_real" },
+        { "$ref": "#/$defs/field_boolean" },
+        { "$ref": "#/$defs/field_datetime" },
+        { "$ref": "#/$defs/field_enum" },
+        { "$ref": "#/$defs/field_reference" }
+      ]
+    },
+    "field_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "text" },
+        "required": { "type": "boolean" },
+        "unique": { "type": "boolean" },
+        "default": { "type": "string" },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "field_integer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "integer" },
+        "required": { "type": "boolean" },
+        "unique": { "type": "boolean" },
+        "default": { "type": "integer" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" }
+      }
+    },
+    "field_real": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "real" },
+        "required": { "type": "boolean" },
+        "unique": { "type": "boolean" },
+        "default": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "field_boolean": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "boolean" },
+        "required": { "type": "boolean" },
+        "default": { "type": "boolean" }
+      }
+    },
+    "field_datetime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "datetime" },
+        "required": { "type": "boolean" },
+        "default": { "type": "string" }
+      }
+    },
+    "field_enum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "enum" },
+        "required": { "type": "boolean" },
+        "default": { "type": "string" },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "field_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "target"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "name": { "$ref": "#/$defs/machineName" },
+        "type": { "const": "reference" },
+        "required": { "type": "boolean" },
+        "target": { "$ref": "#/$defs/stableId" },
+        "onDelete": { "enum": ["set_null", "restrict", "cascade"] }
+      }
+    }
+  }
+}

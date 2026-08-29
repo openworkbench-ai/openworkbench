@@ -1,0 +1,12 @@
+[
+  {
+    "$key": "foundation_plan",
+    "name": "Foundation Strength & Conditioning",
+    "notes": "Base-building block before starting race-specific prep. Focus on movement quality and aerobic base, three sessions a week."
+  },
+  {
+    "$key": "prep_plan",
+    "name": "8-Week Hyrox Prep",
+    "notes": "Beginner-to-intermediate progression toward a first Hyrox race: one full simulation and two station-focused sessions per week."
+  }
+]

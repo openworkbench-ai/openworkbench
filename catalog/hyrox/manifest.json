@@ -1,0 +1,178 @@
+{
+  "app": { "id": "hyrox", "name": "Hyrox Training", "emoji": "🏋️", "color": "#D94F30", "version": 2 },
+  "entities": [
+    {
+      "id": "ent_plan",
+      "name": "plan",
+      "fields": [
+        { "id": "fld_plan_name", "name": "name", "type": "text", "required": true, "max": 120 },
+        { "id": "fld_plan_notes", "name": "notes", "type": "text" }
+      ]
+    },
+    {
+      "id": "ent_workout",
+      "name": "workout",
+      "fields": [
+        { "id": "fld_workout_plan", "name": "plan", "type": "reference", "target": "ent_plan", "required": true, "onDelete": "cascade" },
+        { "id": "fld_workout_name", "name": "name", "type": "text", "required": true, "max": 120 }
+      ]
+    },
+    {
+      "id": "ent_exercise",
+      "name": "exercise",
+      "fields": [
+        { "id": "fld_exercise_workout", "name": "workout", "type": "reference", "target": "ent_workout", "required": true, "onDelete": "cascade" },
+        { "id": "fld_exercise_order", "name": "order", "type": "integer", "required": true, "min": 0 },
+        {
+          "id": "fld_exercise_station",
+          "name": "station",
+          "type": "enum",
+          "required": true,
+          "values": ["run", "ski_erg", "sled_push", "sled_pull", "burpee_broad_jump", "rowing", "farmers_carry", "sandbag_lunges", "wall_balls", "full_simulation"]
+        },
+        { "id": "fld_exercise_target_seconds", "name": "target_seconds", "type": "integer", "min": 0 },
+        { "id": "fld_exercise_status", "name": "status", "type": "enum", "values": ["planned", "completed"], "default": "planned" }
+      ]
+    },
+    {
+      "id": "ent_result",
+      "name": "result",
+      "fields": [
+        { "id": "fld_result_exercise", "name": "exercise", "type": "reference", "target": "ent_exercise", "required": true, "onDelete": "cascade" },
+        { "id": "fld_result_duration_seconds", "name": "duration_seconds", "type": "integer", "required": true, "min": 0 },
+        { "id": "fld_result_reps", "name": "reps", "type": "integer", "min": 0 },
+        { "id": "fld_result_notes", "name": "notes", "type": "text" }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool_create_plan",
+      "name": "create_plan",
+      "description": "Create a new training plan together with its first workout",
+      "params": [
+        { "id": "p_plan_name", "name": "plan_name", "type": "text", "required": true },
+        { "id": "p_plan_notes", "name": "plan_notes", "type": "text" },
+        { "id": "p_workout_name", "name": "workout_name", "type": "text", "required": true }
+      ],
+      "steps": [
+        {
+          "id": "plan",
+          "op": "create",
+          "entity": "ent_plan",
+          "set": { "name": "$params.plan_name", "notes": "$params.plan_notes" }
+        },
+        {
+          "id": "workout",
+          "op": "create",
+          "entity": "ent_workout",
+          "set": { "plan": "$steps.plan.id", "name": "$params.workout_name" }
+        }
+      ]
+    },
+    {
+      "id": "tool_add_workout",
+      "name": "add_workout",
+      "description": "Add another workout to an existing plan",
+      "params": [
+        { "id": "p_add_plan_id", "name": "plan_id", "type": "reference", "target": "ent_plan", "required": true },
+        { "id": "p_add_workout_name", "name": "workout_name", "type": "text", "required": true }
+      ],
+      "steps": [
+        {
+          "op": "create",
+          "entity": "ent_workout",
+          "set": { "plan": "$params.plan_id", "name": "$params.workout_name" }
+        }
+      ]
+    },
+    {
+      "id": "tool_add_exercise",
+      "name": "add_exercise",
+      "description": "Add a station exercise to an existing workout",
+      "params": [
+        { "id": "p_add_ex_workout_id", "name": "workout_id", "type": "reference", "target": "ent_workout", "required": true },
+        { "id": "p_add_ex_order", "name": "order", "type": "integer", "required": true, "min": 0 },
+        {
+          "id": "p_add_ex_station",
+          "name": "station",
+          "type": "enum",
+          "required": true,
+          "values": ["run", "ski_erg", "sled_push", "sled_pull", "burpee_broad_jump", "rowing", "farmers_carry", "sandbag_lunges", "wall_balls", "full_simulation"]
+        },
+        { "id": "p_add_ex_target_seconds", "name": "target_seconds", "type": "integer", "min": 0 }
+      ],
+      "steps": [
+        {
+          "op": "create",
+          "entity": "ent_exercise",
+          "set": {
+            "workout": "$params.workout_id",
+            "order": "$params.order",
+            "station": "$params.station",
+            "target_seconds": "$params.target_seconds"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool_read_workout",
+      "name": "read_workout",
+      "description": "Read a single workout by id, together with all of its exercises",
+      "params": [
+        { "id": "p_read_workout_id", "name": "workout_id", "type": "reference", "target": "ent_workout", "required": true }
+      ],
+      "steps": [
+        { "id": "workout", "op": "read", "entity": "ent_workout", "rowId": "$params.workout_id" },
+        { "id": "exercises", "op": "list", "entity": "ent_exercise", "filter": { "workout": "$params.workout_id" } }
+      ]
+    },
+    {
+      "id": "tool_list_workout",
+      "name": "list_workout",
+      "description": "List all workouts across every plan",
+      "steps": [
+        { "op": "list", "entity": "ent_workout" }
+      ]
+    },
+    {
+      "id": "tool_list_exercise",
+      "name": "list_exercise",
+      "description": "List all exercises across every workout",
+      "steps": [
+        { "op": "list", "entity": "ent_exercise" }
+      ]
+    },
+    {
+      "id": "tool_log_exercise_result",
+      "name": "log_exercise_result",
+      "description": "Log a result for an exercise and mark it completed",
+      "params": [
+        { "id": "p_log_exercise_id", "name": "exercise_id", "type": "reference", "target": "ent_exercise", "required": true },
+        { "id": "p_log_duration_seconds", "name": "duration_seconds", "type": "integer", "required": true, "min": 0 },
+        { "id": "p_log_reps", "name": "reps", "type": "integer", "min": 0 },
+        { "id": "p_log_notes", "name": "notes", "type": "text" }
+      ],
+      "steps": [
+        {
+          "id": "result",
+          "op": "create",
+          "entity": "ent_result",
+          "set": {
+            "exercise": "$params.exercise_id",
+            "duration_seconds": "$params.duration_seconds",
+            "reps": "$params.reps",
+            "notes": "$params.notes"
+          }
+        },
+        {
+          "id": "exercise",
+          "op": "update",
+          "entity": "ent_exercise",
+          "rowId": "$params.exercise_id",
+          "set": { "status": "completed" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "$key": "aerobic_run",
+    "workout": "$workout.aerobic_workout",
+    "order": 1,
+    "station": "run",
+    "target_seconds": 1800,
+    "status": "completed"
+  },
+  {
+    "$key": "sled_push_tech",
+    "workout": "$workout.aerobic_workout",
+    "order": 2,
+    "station": "sled_push",
+    "target_seconds": 300,
+    "status": "completed"
+  },
+  {
+    "workout": "$workout.carry_workout",
+    "order": 1,
+    "station": "farmers_carry",
+    "target_seconds": 240,
+    "status": "planned"
+  },
+  {
+    "workout": "$workout.full_sim_workout",
+    "order": 1,
+    "station": "full_simulation",
+    "target_seconds": 5400,
+    "status": "planned"
+  },
+  {
+    "workout": "$workout.circuit_a_workout",
+    "order": 1,
+    "station": "ski_erg",
+    "target_seconds": 240,
+    "status": "planned"
+  },
+  {
+    "workout": "$workout.circuit_a_workout",
+    "order": 2,
+    "station": "wall_balls",
+    "status": "planned"
+  },
+  {
+    "workout": "$workout.circuit_a_workout",
+    "order": 3,
+    "station": "sandbag_lunges",
+    "status": "planned"
+  },
+  {
+    "workout": "$workout.circuit_b_workout",
+    "order": 1,
+    "station": "burpee_broad_jump",
+    "status": "planned"
+  },
+  {
+    "$key": "row_tt",
+    "workout": "$workout.circuit_b_workout",
+    "order": 2,
+    "station": "rowing",
+    "target_seconds": 240,
+    "status": "completed"
+  }
+]

@@ -4,6 +4,8 @@ import { join } from "node:path";
 export interface AppManifest {
   name: string;
   description: string;
+  emoji?: string;
+  color?: string;
 }
 
 export interface LoadedApp {
@@ -41,7 +43,7 @@ const DEFAULT_ENGINE_URL = "http://127.0.0.1:8080";
 
 /** Shape of catalog/<app>/manifest.json — the pocketknife engine's schema-driven app manifest. */
 interface EngineManifest {
-  app: { id: string; name: string };
+  app: { id: string; name: string; emoji?: string; color?: string };
   entities?: Array<{ id: string; name: string }>;
   tools?: Array<{ id: string; name: string; description?: string }>;
 }
@@ -120,6 +122,8 @@ export function loadCatalogApps(catalogDir: string, engineUrl: string = process.
     const manifest: AppManifest = {
       name: engineManifest.app.name,
       description: `${engineManifest.entities?.length ?? 0} entity type(s), ${tools.length} tool(s)`,
+      emoji: engineManifest.app.emoji,
+      color: engineManifest.app.color,
     };
     apps.push({ manifest, dir: appDir });
 

@@ -23,7 +23,10 @@ async function main() {
   }
 
   const backend = await createAgentBackend(capabilities);
-  await backend.prompt(prompt, (delta) => process.stdout.write(delta));
+  await backend.prompt(prompt, (event) => {
+    if (event.type === "text") process.stdout.write(event.delta);
+    if (event.type === "tool_start") console.error(`[tool] ${event.toolName}`);
+  });
   process.stdout.write("\n");
 
   // Force exit: an MCP server's streaming HTTP connection can otherwise keep

@@ -1,0 +1,340 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   FORTYNINE — design tokens
+   A warm, editorial, paper-first system. Deep forest ink on cream stock,
+   with a small family of pigment accents borrowed from risograph printing.
+   ========================================================================== */
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* --- Raw palette ------------------------------------------------------ */
+  --fern-50: #f2f4ee;
+  --fern-100: #dfe5d6;
+  --fern-200: #bcc9ac;
+  --fern-300: #94a882;
+  --fern-400: #6b8259;
+  --fern-500: #4a6139;
+  --fern-600: #35482a;
+  --fern-700: #2b3a23;
+  --fern-800: #22301b;
+  --fern-900: #171f13;
+
+  --paper-50: #fdfcf6;
+  --paper-100: #faf8ee;
+  --paper-200: #f2efe1;
+  --paper-300: #e8e4d5;
+  --paper-400: #dcd7c5;
+  --paper-500: #c7c1ab;
+  --paper-600: #a39d88;
+  --paper-700: #7c7765;
+
+  --terracotta: #d4643a;
+  --terracotta-soft: #f0c3ae;
+  --blush: #e2a7c4;
+  --blush-soft: #f4dae7;
+  --clay: #c9a57f;
+  --clay-soft: #ecdcc7;
+  --ocean: #6ea9a6;
+  --ocean-soft: #c9e0de;
+  --plum: #7a5a70;
+
+  /* --- Semantic tokens (light) ------------------------------------------ */
+  --canvas: var(--paper-300);
+  --background: var(--paper-100);
+  --foreground: var(--fern-800);
+
+  --card: var(--paper-50);
+  --card-foreground: var(--fern-800);
+  --popover: var(--paper-50);
+  --popover-foreground: var(--fern-800);
+
+  --primary: var(--fern-600);
+  --primary-foreground: var(--paper-50);
+
+  --secondary: var(--paper-300);
+  --secondary-foreground: var(--fern-700);
+
+  --muted: var(--paper-200);
+  --muted-foreground: #6f7a63;
+
+  --accent: var(--terracotta);
+  --accent-foreground: var(--paper-50);
+
+  --destructive: #b23b23;
+  --destructive-foreground: var(--paper-50);
+
+  --success: var(--fern-500);
+  --warning: #c98a1e;
+
+  --border: #d8d3c1;
+  --input: #cec8b4;
+  --ring: var(--fern-400);
+
+  --chart-1: var(--fern-400);
+  --chart-2: var(--terracotta);
+  --chart-3: var(--clay);
+  --chart-4: var(--ocean);
+  --chart-5: var(--blush);
+
+  /* --- Shape & depth ---------------------------------------------------- */
+  --radius: 0.75rem;
+  --shadow-color: 34 43 26;
+
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #10130c;
+  --background: #171b12;
+  --foreground: #ece8d8;
+
+  --card: #1e2318;
+  --card-foreground: #ece8d8;
+  --popover: #212617;
+  --popover-foreground: #ece8d8;
+
+  --primary: var(--fern-200);
+  --primary-foreground: var(--fern-800);
+
+  --secondary: #2a301f;
+  --secondary-foreground: #ded9c6;
+
+  --muted: #242a1b;
+  --muted-foreground: #9aa38c;
+
+  --accent: #e07a51;
+  --accent-foreground: #1c1207;
+
+  --destructive: #d4573a;
+  --destructive-foreground: #1a0f0a;
+
+  --success: var(--fern-300);
+  --warning: #ddad4d;
+
+  --border: #333a26;
+  --input: #3d4531;
+  --ring: var(--fern-300);
+
+  --terracotta-soft: #6b3a26;
+  --blush-soft: #5c3a4c;
+  --clay-soft: #5a4630;
+  --ocean-soft: #2d4a48;
+
+  --shadow-color: 0 0 0;
+
+  color-scheme: dark;
+}
+
+/* ============================================================================
+   Theme mapping — exposes tokens as Tailwind utilities
+   ========================================================================== */
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-fern-50: var(--fern-50);
+  --color-fern-100: var(--fern-100);
+  --color-fern-200: var(--fern-200);
+  --color-fern-300: var(--fern-300);
+  --color-fern-400: var(--fern-400);
+  --color-fern-500: var(--fern-500);
+  --color-fern-600: var(--fern-600);
+  --color-fern-700: var(--fern-700);
+  --color-fern-800: var(--fern-800);
+  --color-fern-900: var(--fern-900);
+
+  --color-paper-50: var(--paper-50);
+  --color-paper-100: var(--paper-100);
+  --color-paper-200: var(--paper-200);
+  --color-paper-300: var(--paper-300);
+  --color-paper-400: var(--paper-400);
+  --color-paper-500: var(--paper-500);
+  --color-paper-600: var(--paper-600);
+  --color-paper-700: var(--paper-700);
+
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-soft: var(--terracotta-soft);
+  --color-blush: var(--blush);
+  --color-blush-soft: var(--blush-soft);
+  --color-clay: var(--clay);
+  --color-clay-soft: var(--clay-soft);
+  --color-ocean: var(--ocean);
+  --color-ocean-soft: var(--ocean-soft);
+  --color-plum: var(--plum);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-xs: calc(var(--radius) - 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 14px);
+
+  --shadow-paper: 0 1px 2px rgb(var(--shadow-color) / 0.05), 0 8px 24px -12px rgb(var(--shadow-color) / 0.18);
+  --shadow-lift: 0 2px 4px rgb(var(--shadow-color) / 0.06), 0 18px 40px -18px rgb(var(--shadow-color) / 0.28);
+  --shadow-press: inset 0 1px 2px rgb(var(--shadow-color) / 0.12);
+
+  --animate-accordion-down: accordion-down 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-accordion-up: accordion-up 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-marquee: marquee 34s linear infinite;
+  --animate-in-fade: fade-in 180ms ease-out;
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-caret: caret 1.05s steps(2, jump-none) infinite;
+  --animate-dot: dot 1.3s ease-in-out infinite;
+}
+
+@keyframes accordion-down {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-accordion-content-height); opacity: 1; }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+/* Light sweeping across text while a model is still producing it. */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes caret {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* ============================================================================
+   Base layer
+   ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01" 1, "cv05" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variation-settings: "SOFT" 20, "WONK" 1;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+
+  p { text-wrap: pretty; }
+
+  ::selection {
+    background-color: var(--terracotta-soft);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* ============================================================================
+   Utilities
+   ========================================================================== */
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Faint paper tooth — keeps large cream fields from looking flat. */
+@utility grain {
+  position: relative;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  }
+}
+
+/* Text that reads as "still being written". */
+@utility shimmer-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 40%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 60%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+}
+
+@utility rule {
+  border-top: 1px solid var(--foreground);
+  opacity: 0.9;
+}

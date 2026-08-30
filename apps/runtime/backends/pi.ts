@@ -8,10 +8,11 @@ import type { Capabilities } from "../app-loader.js";
 import { createCapabilityProvider } from "./pi-capabilities.js";
 
 const MODEL_PROVIDER = "openrouter";
-const MODEL_ID = "z-ai/glm-5.3-flash";
+export const DEFAULT_MODEL_ID = "z-ai/glm-5.3-flash";
 
 export async function createPiAgentBackend(
-  capabilities: Capabilities = { skillPaths: [], mcpServers: [] }
+  capabilities: Capabilities = { skillPaths: [], mcpServers: [] },
+  initialModelId: string = DEFAULT_MODEL_ID
 ): Promise<AgentBackend> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -24,7 +25,8 @@ export async function createPiAgentBackend(
     modelsPath: new URL("../../../pi/models.json", import.meta.url).pathname,
   });
   await modelRuntime.setRuntimeApiKey(MODEL_PROVIDER, apiKey);
-  const model = modelRuntime.getModel(MODEL_PROVIDER, MODEL_ID);
+  let modelId = initialModelId;
+  const model = modelRuntime.getModel(MODEL_PROVIDER, modelId);
 
   const { resourceLoader, tools: customTools } = await createCapabilityProvider(capabilities);
 
@@ -37,13 +39,18 @@ export async function createPiAgentBackend(
   });
 
   return {
-    async prompt(text, onTextDelta) {
+    async prompt(text, onEvent) {
       const unsubscribe = session.subscribe((event) => {
-        if (
-          event.type === "message_update" &&
-          event.assistantMessageEvent.type === "text_delta"
-        ) {
-          onTextDelta(event.assistantMessageEvent.delta);
+        if (event.type === "message_update") {
+          if (event.assistantMessageEvent.type === "text_delta") {
+            onEvent({ type: "text", delta: event.assistantMessageEvent.delta });
+          } else if (event.assistantMessageEvent.type === "thinking_delta") {
+            onEvent({ type: "thinking", delta: event.assistantMessageEvent.delta });
+          }
+        } else if (event.type === "tool_execution_start") {
+          onEvent({ type: "tool_start", toolCallId: event.toolCallId, toolName: event.toolName, args: event.args });
+        } else if (event.type === "tool_execution_end") {
+          onEvent({ type: "tool_end", toolCallId: event.toolCallId, toolName: event.toolName, isError: event.isError });
         }
       });
       try {
@@ -51,6 +58,17 @@ export async function createPiAgentBackend(
       } finally {
         unsubscribe();
       }
+    },
+    async setModel(nextModelId) {
+      const nextModel = modelRuntime.getModel(MODEL_PROVIDER, nextModelId);
+      if (!nextModel) {
+        throw new Error(`Unknown model "${nextModelId}" for provider "${MODEL_PROVIDER}".`);
+      }
+      await session.setModel(nextModel);
+      modelId = nextModelId;
+    },
+    getModelId() {
+      return modelId;
     },
   };
 }

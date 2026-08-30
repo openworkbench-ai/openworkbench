@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx apps/runtime/agent.ts"
+    "start": "tsx apps/runtime/agent.ts",
+    "server": "tsx apps/runtime/server.ts",
+    "web": "npm --prefix apps/web run dev"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.0",

@@ -55,12 +55,13 @@ var ReservedNames = []string{"id", "created_at", "updated_at"}
 
 // App is the root of the schema model.
 type App struct {
-	ID       string
-	Name     string
-	Emoji    string
-	Color    string
-	Version  int
-	Entities []*Entity
+	ID          string
+	Name        string
+	Description string
+	Emoji       string
+	Color       string
+	Version     int
+	Entities    []*Entity
 	// Frontend points at this version's pre-built static bundle, or nil if the
 	// app declares no frontend (API-only).
 	Frontend *Frontend

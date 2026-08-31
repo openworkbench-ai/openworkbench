@@ -6,6 +6,49 @@ export interface AppInfo {
   color?: string
 }
 
+export interface ToolParam {
+  id: string
+  name: string
+  type: string
+  required?: boolean
+}
+
+export interface ToolInfo {
+  id: string
+  name: string
+  description?: string
+  params?: ToolParam[]
+}
+
+export interface SkillInfo {
+  id: string
+  name: string
+  description: string
+  content: string
+}
+
+export interface EntityField {
+  id: string
+  name: string
+  type: string
+  required?: boolean
+  target?: string
+  values?: string[]
+}
+
+export interface EntityInfo {
+  id: string
+  name: string
+  fields: EntityField[]
+}
+
+export interface DataPage {
+  data: Record<string, unknown>[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface ModelCost {
   input: number
   output: number
@@ -33,6 +76,31 @@ async function asJson<T>(res: Response): Promise<T> {
 
 export async function fetchApps(): Promise<{ apps: AppInfo[] }> {
   return asJson(await fetch(`${BASE}/apps`))
+}
+
+export async function fetchAppTools(id: string): Promise<{ tools: ToolInfo[] }> {
+  return asJson(await fetch(`${BASE}/apps/${id}/tools`))
+}
+
+export async function fetchAppSkills(id: string): Promise<{ skills: SkillInfo[] }> {
+  return asJson(await fetch(`${BASE}/apps/${id}/skills`))
+}
+
+export async function fetchAppEntities(id: string): Promise<{ entities: EntityInfo[] }> {
+  return asJson(await fetch(`${BASE}/apps/${id}/entities`))
+}
+
+export async function fetchAppData(
+  id: string,
+  entity: string,
+  params: { limit?: number; offset?: number; sort?: string } = {},
+): Promise<DataPage> {
+  const query = new URLSearchParams()
+  if (params.limit != null) query.set("limit", String(params.limit))
+  if (params.offset != null) query.set("offset", String(params.offset))
+  if (params.sort) query.set("sort", params.sort)
+  const suffix = query.toString() ? `?${query.toString()}` : ""
+  return asJson(await fetch(`${BASE}/apps/${id}/data/${entity}${suffix}`))
 }
 
 export async function fetchModels(): Promise<{ models: ModelInfo[]; current: string }> {

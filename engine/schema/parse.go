@@ -20,11 +20,12 @@ type rawManifest struct {
 }
 
 type rawApp struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Emoji   string `json:"emoji"`
-	Color   string `json:"color"`
-	Version int    `json:"version"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Emoji       string `json:"emoji"`
+	Color       string `json:"color"`
+	Version     int    `json:"version"`
 }
 
 type rawFrontend struct {
@@ -99,11 +100,12 @@ func Parse(data []byte) (*App, error) {
 	}
 
 	app := &App{
-		ID:      raw.App.ID,
-		Name:    raw.App.Name,
-		Emoji:   raw.App.Emoji,
-		Color:   raw.App.Color,
-		Version: raw.App.Version,
+		ID:          raw.App.ID,
+		Name:        raw.App.Name,
+		Description: raw.App.Description,
+		Emoji:       raw.App.Emoji,
+		Color:       raw.App.Color,
+		Version:     raw.App.Version,
 	}
 
 	for _, re := range raw.Entities {

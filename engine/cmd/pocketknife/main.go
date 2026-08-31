@@ -16,6 +16,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"pocketknife/adminapi"
 	"pocketknife/api"
 	"pocketknife/cors"
 	"pocketknife/mcpserver"
@@ -125,6 +126,7 @@ func runServe(args []string) {
 	mux.Handle("/apps/", api.NewServer(reg))
 	mux.Handle("/mcp/", mcpserver.NewServer(reg))
 	mux.Handle("/validate", validateapi.NewServer())
+	mux.Handle("/admin/", adminapi.NewServer(reg, *catalogDir, *dataDir))
 
 	handler := recoverMiddleware(cors.Middleware(*corsEnabled, mux))
 	log.Printf("pocketknife listening on %s (catalog dir: %s, data dir: %s)", *addr, *catalogDir, *dataDir)

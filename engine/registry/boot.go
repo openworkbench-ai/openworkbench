@@ -68,75 +68,83 @@ func Load(appsDir, dataDir string) (*Registry, []LoadResult, error) {
 	var results []LoadResult
 
 	for _, manifestPath := range matches {
-		dir := filepath.Dir(manifestPath)
-		res := LoadResult{Dir: dir, ManifestPath: manifestPath}
-
-		data, err := os.ReadFile(manifestPath)
-		if err != nil {
-			res.Err = fmt.Errorf("read manifest: %w", err)
-			results = append(results, res)
-			continue
+		ra, res := LoadApp(manifestPath, dataDir)
+		if res.OK {
+			reg.Register(ra)
 		}
-
-		app, verrs := validate.Manifest(data)
-		if len(verrs) > 0 {
-			res.Errors = verrs
-			results = append(results, res)
-			continue
-		}
-		res.AppID = app.ID
-
-		stmts, err := materialize.Statements(app)
-		if err != nil {
-			res.Err = fmt.Errorf("materialize: %w", err)
-			results = append(results, res)
-			continue
-		}
-
-		appDataDir := filepath.Join(dataDir, app.ID)
-		if err := os.MkdirAll(appDataDir, 0o755); err != nil {
-			res.Err = fmt.Errorf("create data dir: %w", err)
-			results = append(results, res)
-			continue
-		}
-
-		dbPath := filepath.Join(appDataDir, "data.db")
-		_, statErr := os.Stat(dbPath)
-		res.Fresh = os.IsNotExist(statErr)
-
-		st, err := store.Open(dbPath)
-		if err != nil {
-			res.Err = fmt.Errorf("open store: %w", err)
-			results = append(results, res)
-			continue
-		}
-		if err := st.ApplyDDL(stmts); err != nil {
-			st.Close()
-			res.Err = fmt.Errorf("apply ddl: %w", err)
-			results = append(results, res)
-			continue
-		}
-
-		if err := st.VerifySchema(app); err != nil {
-			st.Close()
-			res.Err = fmt.Errorf("manifest/database consistency check failed: %w", err)
-			results = append(results, res)
-			continue
-		}
-
-		if err := checkSchemaFingerprint(st, app); err != nil {
-			st.Close()
-			res.Err = fmt.Errorf("manifest/database consistency check failed: %w", err)
-			results = append(results, res)
-			continue
-		}
-
-		reg.Register(&RegisteredApp{Schema: app, Store: st, Dir: dir})
-		res.OK = true
 		results = append(results, res)
 	}
 
 	return reg, results, nil
+}
+
+// LoadApp runs every step Load runs for one manifest -- read, validate,
+// materialize, open the store, verify it's consistent with the manifest --
+// and returns the resulting RegisteredApp plus a LoadResult recording the
+// outcome. It does not register the app into any Registry: Load does that
+// itself for each match in a boot-time scan, while a caller adding a single
+// app after boot (the admin API's install route, via the lifecycle package)
+// decides whether to seed starter data first. res.OK is false, and ra is
+// nil, if any step failed -- check res.Errors/res.Err, never ra, to find out
+// why.
+func LoadApp(manifestPath, dataDir string) (ra *RegisteredApp, res LoadResult) {
+	dir := filepath.Dir(manifestPath)
+	res = LoadResult{Dir: dir, ManifestPath: manifestPath}
+
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		res.Err = fmt.Errorf("read manifest: %w", err)
+		return nil, res
+	}
+
+	app, verrs := validate.Manifest(data)
+	if len(verrs) > 0 {
+		res.Errors = verrs
+		return nil, res
+	}
+	res.AppID = app.ID
+
+	stmts, err := materialize.Statements(app)
+	if err != nil {
+		res.Err = fmt.Errorf("materialize: %w", err)
+		return nil, res
+	}
+
+	appDataDir := filepath.Join(dataDir, app.ID)
+	if err := os.MkdirAll(appDataDir, 0o755); err != nil {
+		res.Err = fmt.Errorf("create data dir: %w", err)
+		return nil, res
+	}
+
+	dbPath := filepath.Join(appDataDir, "data.db")
+	_, statErr := os.Stat(dbPath)
+	res.Fresh = os.IsNotExist(statErr)
+
+	st, err := store.Open(dbPath)
+	if err != nil {
+		res.Err = fmt.Errorf("open store: %w", err)
+		return nil, res
+	}
+	if err := st.ApplyDDL(stmts); err != nil {
+		st.Close()
+		res.Err = fmt.Errorf("apply ddl: %w", err)
+		return nil, res
+	}
+
+	if err := st.VerifySchema(app); err != nil {
+		st.Close()
+		res.Err = fmt.Errorf("manifest/database consistency check failed: %w", err)
+		return nil, res
+	}
+
+	if err := checkSchemaFingerprint(st, app); err != nil {
+		st.Close()
+		res.Err = fmt.Errorf("manifest/database consistency check failed: %w", err)
+		return nil, res
+	}
+
+	res.OK = true
+	return &RegisteredApp{Schema: app, Store: st, Dir: dir}, res
 }
 
 // checkSchemaFingerprint enforces that app's current schema fingerprint

@@ -1,5 +1,12 @@
 {
-  "app": { "id": "hyrox", "name": "Hyrox Training", "emoji": "🏋️", "color": "#D94F30", "version": 2 },
+  "app": {
+    "id": "hyrox",
+    "name": "Hyrox Training",
+    "description": "Plan Hyrox training sessions, track station exercises, and log workout results.",
+    "emoji": "🏋️",
+    "color": "#D94F30",
+    "version": 2
+  },
   "entities": [
     {
       "id": "ent_plan",

@@ -14,44 +14,36 @@
           "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 }
         },
         {
-          "id": "moonshotai/kimi-k3",
-          "name": "Kimi K3",
-          "tier": "frontier",
-          "reasoning": true,
-          "contextWindow": 1048576,
-          "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 }
-        },
-        {
-          "id": "x-ai/grok-4.6",
-          "name": "Grok 4.6",
-          "tier": "balanced",
-          "reasoning": true,
-          "contextWindow": 500000,
-          "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
-        },
-        {
-          "id": "qwen/qwen3.8-max",
-          "name": "Qwen3.8 Max",
+          "id": "anthropic/claude-sonnet-5",
+          "name": "Claude Sonnet 5",
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1000000,
-          "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
+          "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 }
         },
         {
-          "id": "deepseek/deepseek-v4-pro-0813",
-          "name": "DeepSeek V4 Pro",
+          "id": "openai/gpt-5.6-sol",
+          "name": "GPT-5.6 Sol",
+          "tier": "frontier",
+          "reasoning": true,
+          "contextWindow": 1050000,
+          "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 }
+        },
+        {
+          "id": "openai/gpt-5.6-luna",
+          "name": "GPT-5.6 Luna",
+          "tier": "cheap",
+          "reasoning": false,
+          "contextWindow": 1050000,
+          "cost": { "input": 0.2, "output": 1.2, "cacheRead": 0.02, "cacheWrite": 0.25 }
+        },
+        {
+          "id": "z-ai/glm-5.3",
+          "name": "GLM-5.3",
           "tier": "balanced",
           "reasoning": true,
-          "contextWindow": 1048576,
-          "cost": { "input": 0.66, "output": 1.98, "cacheRead": 0, "cacheWrite": 0 }
-        },
-        {
-          "id": "google/gemini-3.7-flash",
-          "name": "Gemini 3.7 Flash",
-          "tier": "cheap",
-          "reasoning": true,
-          "contextWindow": 1048576,
-          "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.19, "cacheWrite": 0 }
+          "contextWindow": 1310720,
+          "cost": { "input": 1.188, "output": 4.18, "cacheRead": 0.247, "cacheWrite": 0 }
         },
         {
           "id": "z-ai/glm-5.3-flash",
@@ -62,12 +54,44 @@
           "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 }
         },
         {
-          "id": "deepseek/deepseek-v4-flash-0731",
-          "name": "DeepSeek V4 Flash",
+          "id": "qwen/qwen3.8-max",
+          "name": "Qwen3.8 Max",
+          "tier": "balanced",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
+        },
+        {
+          "id": "google/gemini-3.7-flash",
+          "name": "Gemini 3.7 Flash",
           "tier": "cheap",
-          "reasoning": false,
-          "contextWindow": 1310720,
-          "cost": { "input": 0.065, "output": 0.18, "cacheRead": 0, "cacheWrite": 0 }
+          "reasoning": true,
+          "contextWindow": 1048576,
+          "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.19, "cacheWrite": 0 }
+        },
+        {
+          "id": "x-ai/grok-4.6",
+          "name": "Grok 4.6",
+          "tier": "frontier",
+          "reasoning": true,
+          "contextWindow": 500000,
+          "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
+        },
+        {
+          "id": "moonshotai/kimi-k3",
+          "name": "Kimi K3",
+          "tier": "frontier",
+          "reasoning": true,
+          "contextWindow": 1048576,
+          "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 }
+        },
+        {
+          "id": "deepseek/deepseek-v4-pro-0813",
+          "name": "DeepSeek V4 Pro",
+          "tier": "balanced",
+          "reasoning": true,
+          "contextWindow": 1048576,
+          "cost": { "input": 0.66, "output": 1.98, "cacheRead": 0, "cacheWrite": 0 }
         }
       ]
     }

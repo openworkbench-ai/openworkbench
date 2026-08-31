@@ -8,9 +8,47 @@ export interface AppManifest {
   color?: string;
 }
 
+export interface EngineEntityField {
+  id: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  target?: string;
+  values?: string[];
+}
+
+export interface EngineEntity {
+  id: string;
+  name: string;
+  fields: EngineEntityField[];
+}
+
+export interface EngineToolParam {
+  id: string;
+  name: string;
+  type: string;
+  required?: boolean;
+}
+
+export interface EngineTool {
+  id: string;
+  name: string;
+  description?: string;
+  params?: EngineToolParam[];
+}
+
 export interface LoadedApp {
   manifest: AppManifest;
   dir: string;
+  /** Present only for catalog (engine-backed) apps — the raw manifest tools/entities. */
+  engine?: { entities: EngineEntity[]; tools: EngineTool[] };
+}
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
 }
 
 export interface McpServerConfig {
@@ -43,9 +81,9 @@ const DEFAULT_ENGINE_URL = "http://127.0.0.1:8080";
 
 /** Shape of catalog/<app>/manifest.json — the pocketknife engine's schema-driven app manifest. */
 interface EngineManifest {
-  app: { id: string; name: string; emoji?: string; color?: string };
-  entities?: Array<{ id: string; name: string }>;
-  tools?: Array<{ id: string; name: string; description?: string }>;
+  app: { id: string; name: string; description?: string; emoji?: string; color?: string };
+  entities?: EngineEntity[];
+  tools?: EngineTool[];
 }
 
 /**
@@ -91,6 +129,45 @@ export function loadApps(appsDir: string): LoadAppsResult {
   return { apps, capabilities: { skillPaths, mcpServers } };
 }
 
+/** Splits a SKILL.md file into its flat `name`/`description` frontmatter and markdown body. */
+function parseSkillFile(path: string): { name: string; description: string; content: string } {
+  const raw = readFileSync(path, "utf-8");
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(raw);
+  if (!match) return { name: "", description: "", content: raw };
+
+  const [, frontmatter, body] = match;
+  const fields: Record<string, string> = {};
+  for (const line of frontmatter.split(/\r?\n/)) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim().replace(/^["']|["']$/g, "");
+    fields[key] = value;
+  }
+
+  return { name: fields.name ?? "", description: fields.description ?? "", content: body.trim() };
+}
+
+/** Reads every `<appDir>/skills/<skill>/SKILL.md`, parsed for display in the app viewer. */
+export function readSkills(appDir: string): SkillInfo[] {
+  const skillsDir = join(appDir, "skills");
+  if (!existsSync(skillsDir)) return [];
+
+  const skills: SkillInfo[] = [];
+  for (const entry of readdirSync(skillsDir)) {
+    const skillDir = join(skillsDir, entry);
+    if (!statSync(skillDir).isDirectory()) continue;
+
+    const skillFile = join(skillDir, "SKILL.md");
+    if (!existsSync(skillFile)) continue;
+
+    const { name, description, content } = parseSkillFile(skillFile);
+    skills.push({ id: entry, name: name || entry, description, content });
+  }
+
+  return skills;
+}
+
 /**
  * Scans `catalogDir` for engine-managed apps (one subdirectory per app, each
  * with a `manifest.json` in the pocketknife engine's schema) and aggregates
@@ -119,13 +196,15 @@ export function loadCatalogApps(catalogDir: string, engineUrl: string = process.
 
     const engineManifest: EngineManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
     const tools = engineManifest.tools ?? [];
+
+    // Falls back to a generated summary for apps that haven't set a description yet.
     const manifest: AppManifest = {
       name: engineManifest.app.name,
-      description: `${engineManifest.entities?.length ?? 0} entity type(s), ${tools.length} tool(s)`,
+      description: engineManifest.app.description ?? `${engineManifest.entities?.length ?? 0} entity type(s), ${tools.length} tool(s)`,
       emoji: engineManifest.app.emoji,
       color: engineManifest.app.color,
     };
-    apps.push({ manifest, dir: appDir });
+    apps.push({ manifest, dir: appDir, engine: { entities: engineManifest.entities ?? [], tools } });
 
     const skillsDir = join(appDir, "skills");
     if (existsSync(skillsDir)) {

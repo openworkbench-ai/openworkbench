@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { fetchApps, type AppInfo } from "@/lib/api"
 import { PageHeader } from "@/components/shell/page-header"
@@ -8,7 +9,7 @@ import { Heading, Muted } from "@/components/ui/typography"
 
 function AppRow({ app }: { app: AppInfo }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5">
+    <Link to={`/apps/${app.id}`} className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-foreground/[0.03]">
       <div
         className="grid size-10 shrink-0 place-items-center rounded-lg text-lg"
         style={{ backgroundColor: app.color ?? "var(--muted)" }}
@@ -20,7 +21,7 @@ function AppRow({ app }: { app: AppInfo }) {
         <p className="truncate text-sm leading-tight text-muted-foreground">{app.description}</p>
       </div>
       <Badge variant="muted">Installed</Badge>
-    </div>
+    </Link>
   )
 }
 

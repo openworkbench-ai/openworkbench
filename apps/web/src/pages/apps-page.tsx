@@ -20,7 +20,9 @@ function AppRow({ app }: { app: AppInfo }) {
         <p className="truncate font-medium leading-tight">{app.name}</p>
         <p className="truncate text-sm leading-tight text-muted-foreground">{app.description}</p>
       </div>
-      <Badge variant="muted">Installed</Badge>
+      <Badge variant={app.status === "inactive" ? "outline" : "muted"}>
+        {app.manageable ? (app.status === "inactive" ? "Inactive" : "Active") : "Installed"}
+      </Badge>
     </Link>
   )
 }

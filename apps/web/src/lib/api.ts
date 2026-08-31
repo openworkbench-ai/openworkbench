@@ -4,6 +4,9 @@ export interface AppInfo {
   description: string
   emoji?: string
   color?: string
+  /** Whether this app can be activated/deactivated — only catalog (engine-backed) apps go through that lifecycle. */
+  manageable?: boolean
+  status?: "active" | "inactive"
 }
 
 export interface ToolParam {
@@ -76,6 +79,19 @@ async function asJson<T>(res: Response): Promise<T> {
 
 export async function fetchApps(): Promise<{ apps: AppInfo[] }> {
   return asJson(await fetch(`${BASE}/apps`))
+}
+
+export interface AppStatus {
+  id: string
+  status: "active" | "inactive"
+}
+
+export async function activateApp(id: string): Promise<AppStatus> {
+  return asJson(await fetch(`${BASE}/apps/${id}/activate`, { method: "POST" }))
+}
+
+export async function deactivateApp(id: string): Promise<AppStatus> {
+  return asJson(await fetch(`${BASE}/apps/${id}/deactivate`, { method: "POST" }))
 }
 
 export async function fetchAppTools(id: string): Promise<{ tools: ToolInfo[] }> {

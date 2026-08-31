@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "cd ../.. && tsx apps/runtime/agent.ts",
-    "server": "cd ../.. && tsx apps/runtime/server.ts"
+    "start": "cd ../.. && tsx --env-file-if-exists=.env apps/runtime/agent.ts",
+    "server": "cd ../.. && tsx --env-file-if-exists=.env apps/runtime/server.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.0",

@@ -13,6 +13,8 @@ import {
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronsUpDown } from "lucide-react"
 
 import {
+  activateApp,
+  deactivateApp,
   fetchAppData,
   fetchAppEntities,
   fetchAppSkills,
@@ -32,8 +34,11 @@ import { Input } from "@/components/ui/input"
 import { Markdown } from "@/components/ui/markdown"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Stat } from "@/components/ui/stat"
+import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/toast"
 import { Heading, Muted } from "@/components/ui/typography"
 
 /** The engine caps `limit` at 200 (see engine/domain/query.go) — the largest batch we can pull in one request for client-side sort/filter. */
@@ -53,6 +58,76 @@ function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
   }, deps)
 
   return { data, error }
+}
+
+function OverviewTab({
+  app,
+  onStatusChange,
+}: {
+  app: AppInfo
+  onStatusChange: (status: "active" | "inactive") => void
+}) {
+  const { data: toolsData } = useAsync(() => fetchAppTools(app.id), [app.id])
+  const { data: skillsData } = useAsync(() => fetchAppSkills(app.id), [app.id])
+  const { data: entitiesData } = useAsync(() => fetchAppEntities(app.id), [app.id])
+  const [pending, setPending] = useState(false)
+
+  const isActive = app.status !== "inactive"
+
+  async function toggle() {
+    setPending(true)
+    try {
+      const result = isActive ? await deactivateApp(app.id) : await activateApp(app.id)
+      onStatusChange(result.status)
+      toast(result.status === "inactive" ? `${app.name} disabled` : `${app.name} enabled`)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-card p-6 shadow-paper">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Heading level="h3" as="h3">
+              About
+            </Heading>
+            <Muted className="mt-1 max-w-[52ch]">{app.description}</Muted>
+          </div>
+          {app.manageable ? (
+            <Badge variant={isActive ? "muted" : "outline"}>{isActive ? "Active" : "Inactive"}</Badge>
+          ) : null}
+        </div>
+
+        <dl className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <div>
+            <dt className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted-foreground">App ID</dt>
+            <dd className="mt-1 font-mono text-sm">{app.id}</dd>
+          </div>
+          <Stat value={toolsData ? toolsData.tools.length : "—"} label="Tools" />
+          <Stat value={skillsData ? skillsData.skills.length : "—"} label="Skills" />
+          <Stat value={entitiesData ? entitiesData.entities.length : "—"} label="Entities" />
+        </dl>
+      </div>
+
+      {app.manageable ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-6 shadow-paper">
+          <div>
+            <p className="font-medium">{isActive ? "Disable this app" : "Enable this app"}</p>
+            <Muted className="mt-1 max-w-[48ch]">
+              {isActive
+                ? "Stops the agent from using this app's tools until you re-enable it. No data is deleted."
+                : "Lets the agent use this app's tools again."}
+            </Muted>
+          </div>
+          <Switch checked={isActive} disabled={pending} onCheckedChange={toggle} />
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function ToolsTab({ appId }: { appId: string }) {
@@ -365,12 +440,23 @@ function AppDetailPage() {
             </Alert>
           ) : null}
 
-          <Tabs defaultValue="tools" className="mt-8">
+          <Tabs defaultValue="overview" className="mt-8">
             <TabsList variant="underline">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="data">Data</TabsTrigger>
             </TabsList>
+            <TabsContent value="overview">
+              {app ? (
+                <OverviewTab
+                  app={app}
+                  onStatusChange={(status) => setApp((prev) => (prev ? { ...prev, status } : prev))}
+                />
+              ) : (
+                <Skeleton className="h-32" />
+              )}
+            </TabsContent>
             <TabsContent value="tools">
               <ToolsTab appId={id} />
             </TabsContent>

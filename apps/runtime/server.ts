@@ -28,14 +28,41 @@ function loadCuratedModels(): ModelInfo[] {
   return models.map((m: ModelInfo) => ({ ...m, id: m.id, name: m.name ?? m.id }));
 }
 
-function appToDto(app: LoadedApp) {
+/** Only catalog (engine-backed) apps go through the registry's active/inactive lifecycle (see engine/adminapi); file-based apps have no such concept and are always "active". */
+function appToDto(app: LoadedApp, statuses: Map<string, string>) {
+  const id = basename(app.dir);
   return {
-    id: basename(app.dir),
+    id,
     name: app.manifest.name,
     description: app.manifest.description,
     emoji: app.manifest.emoji,
     color: app.manifest.color,
+    manageable: app.engine != null,
+    status: app.engine != null ? statuses.get(id) ?? "active" : "active",
   };
+}
+
+/** GETs the engine's admin app list for display; if the engine is unreachable, callers fall back to "active" per app rather than failing the whole request. */
+async function fetchAdminStatuses(): Promise<Map<string, string>> {
+  try {
+    const res = await fetch(`${ENGINE_URL}/admin/apps`);
+    if (!res.ok) return new Map();
+    const body = (await res.json()) as { apps?: { id: string; status: string }[] };
+    return new Map((body.apps ?? []).map((a) => [a.id, a.status]));
+  } catch {
+    return new Map();
+  }
+}
+
+type ToggleAction = "activate" | "deactivate";
+
+/** Matches `/api/apps/:id/(activate|deactivate)`. */
+function matchToggleRoute(pathname: string): { id: string; action: ToggleAction } | null {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length !== 4 || segments[0] !== "api" || segments[1] !== "apps" || !segments[2]) return null;
+  const action = segments[3];
+  if (action !== "activate" && action !== "deactivate") return null;
+  return { id: segments[2], action };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
@@ -136,7 +163,8 @@ async function main() {
 
     try {
       if (req.method === "GET" && url.pathname === "/api/apps") {
-        sendJson(res, 200, { apps: apps.map(appToDto) });
+        const statuses = await fetchAdminStatuses();
+        sendJson(res, 200, { apps: apps.map((app) => appToDto(app, statuses)) });
         return;
       }
 
@@ -146,7 +174,31 @@ async function main() {
           sendJson(res, 409, { error: result.reason });
           return;
         }
-        sendJson(res, 200, { apps: apps.map(appToDto) });
+        const statuses = await fetchAdminStatuses();
+        sendJson(res, 200, { apps: apps.map((app) => appToDto(app, statuses)) });
+        return;
+      }
+
+      const toggleMatch = req.method === "POST" ? matchToggleRoute(url.pathname) : null;
+      if (toggleMatch) {
+        const app = appsById.get(toggleMatch.id);
+        if (!app) {
+          sendJson(res, 404, { error: `unknown app "${toggleMatch.id}"` });
+          return;
+        }
+        if (!app.engine) {
+          sendJson(res, 400, { error: `app "${toggleMatch.id}" cannot be activated or deactivated` });
+          return;
+        }
+        const engineRes = await fetch(`${ENGINE_URL}/admin/apps/${toggleMatch.id}/${toggleMatch.action}`, {
+          method: "POST",
+        });
+        const body = await engineRes.text();
+        res.writeHead(engineRes.status, {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.end(body);
         return;
       }
 

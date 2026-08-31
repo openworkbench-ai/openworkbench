@@ -35,6 +35,12 @@ export async function createPiAgentBackend(
     modelRuntime,
     model,
     resourceLoader,
+    // This agent's job is to converse and use installed apps' MCP tools --
+    // never to read/write files or run shell commands. `tools` as an
+    // explicit allowlist (rather than the ambiguous default-active-tools
+    // behavior) also filters customTools by the same rule, so it must name
+    // them too, not just omit the built-ins.
+    tools: customTools.map((tool) => tool.name),
     customTools,
   });
 

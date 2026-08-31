@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { AlertTriangle, Check, ChevronRight, CircleDashed, Loader2, Terminal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { CodeBlock } from "./code-block"
 
 type ToolStatus = "pending" | "running" | "success" | "error"
 
@@ -118,24 +119,43 @@ function ToolCallPanel({
   )
 }
 
-/** Key/value read-out for tool arguments. */
+const INLINE_ARG_MAX_LENGTH = 72
+
+/** Key/value read-out for tool arguments. Values too long or multi-line to sit on one row drop into a code block instead of truncating illegibly. */
 function ToolCallArgs({
   args,
   className,
   ...props
-}: React.ComponentProps<"dl"> & { args: Record<string, React.ReactNode> }) {
+}: React.ComponentProps<"dl"> & { args: Record<string, unknown> }) {
   return (
     <dl
       data-slot="tool-call-args"
       className={cn("grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 font-mono text-xs", className)}
       {...props}
     >
-      {Object.entries(args).map(([key, value]) => (
-        <div key={key} className="col-span-2 grid grid-cols-subgrid">
-          <dt className="text-muted-foreground">{key}</dt>
-          <dd className="truncate">{value}</dd>
-        </div>
-      ))}
+      {Object.entries(args).map(([key, value]) => {
+        const isString = typeof value === "string"
+        const inline = isString ? value : JSON.stringify(value)
+        const overflows = inline.length > INLINE_ARG_MAX_LENGTH || inline.includes("\n")
+
+        if (overflows) {
+          return (
+            <div key={key} className="col-span-2 flex flex-col gap-1">
+              <dt className="text-muted-foreground">{key}</dt>
+              <dd>
+                <CodeBlock code={isString ? value : JSON.stringify(value, null, 2)} language={isString ? "text" : "json"} />
+              </dd>
+            </div>
+          )
+        }
+
+        return (
+          <div key={key} className="col-span-2 grid grid-cols-subgrid">
+            <dt className="text-muted-foreground">{key}</dt>
+            <dd className="truncate">{inline}</dd>
+          </div>
+        )
+      })}
     </dl>
   )
 }

@@ -1,4 +1,4 @@
-# Pocketknife runtime — single generic, schema-driven backend engine.
+# Open Workbench runtime — single generic, schema-driven backend engine.
 #
 # Go is expected on PATH. If you installed it under ~/.local/go (no Homebrew),
 # run: export PATH="$$HOME/.local/go/bin:$$PATH"

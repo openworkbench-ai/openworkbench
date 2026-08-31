@@ -39,6 +39,7 @@ func NewServer(reg *registry.Registry, catalogDir, dataDir string) http.Handler 
 	s := &Server{reg: reg, catalogDir: catalogDir, dataDir: dataDir}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/apps", s.handleList)
+	mux.HandleFunc("PUT /admin/apps/{id}", s.handleSave)
 	mux.HandleFunc("POST /admin/apps/{id}/install", s.handleInstall)
 	mux.HandleFunc("POST /admin/apps/{id}/activate", s.handleActivate)
 	mux.HandleFunc("POST /admin/apps/{id}/deactivate", s.handleDeactivate)

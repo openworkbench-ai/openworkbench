@@ -141,13 +141,14 @@ export type AgentStreamEvent =
   | { type: "done" }
   | { type: "error"; reason: string }
 
-/** POSTs a chat message and parses the SSE response as it streams in. */
-export async function streamChat(
+/** Shared streaming plumbing for both `/chat` and `/build-chat` — same SSE event shape. */
+async function streamSse(
+  path: string,
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/chat`, {
+  const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
@@ -176,4 +177,80 @@ export async function streamChat(
       boundary = buffer.indexOf("\n\n")
     }
   }
+}
+
+/** POSTs a chat message and parses the SSE response as it streams in. */
+export async function streamChat(
+  message: string,
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamSse("/chat", message, onEvent, signal)
+}
+
+/** Same as {@link streamChat}, against the build agent's own session. */
+export async function streamBuildChat(
+  message: string,
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamSse("/build-chat", message, onEvent, signal)
+}
+
+export interface AskQuestion {
+  id: string
+  question: string
+  type: "single_choice" | "multiple_choice" | "free_text"
+  options?: string[]
+}
+
+export interface PlanStep {
+  id: string
+  label: string
+  status: "pending" | "active" | "done" | "failed"
+}
+
+/** Answers a pending `ask_questions` tool call so the build agent's turn can resume. */
+export async function answerBuildQuestions(
+  toolCallId: string,
+  answers: { id: string; answer: string | string[] }[],
+): Promise<void> {
+  await asJson(
+    await fetch(`${BASE}/build-chat/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toolCallId, answers }),
+    }),
+  )
+}
+
+/** A build agent's in-progress draft — read straight off its scratch workspace for the review card. */
+export interface AppDraft {
+  id: string
+  app: { id: string; name: string; description?: string; emoji?: string; color?: string; version?: number }
+  entities: EntityInfo[]
+  tools: ToolInfo[]
+  skills: string[]
+  data: { entity: string; count: number }[]
+}
+
+/** Fetches the draft `present_app` handed to the user for review, by app id. */
+export async function fetchBuildDraft(id: string): Promise<AppDraft> {
+  return asJson(await fetch(`${BASE}/build-chat/draft/${id}`))
+}
+
+export type InstallResult = { ok: true; message: string } | { ok: false; status: number; message: string }
+
+/**
+ * Saves and installs a drafted app — the user-initiated action behind the review card's "Install" button. Resolves
+ * with `{ ok: false, ... }` rather than throwing on rejection, since a validation/install failure here is an
+ * expected outcome the card should display, not an exceptional one.
+ */
+export async function installBuildDraft(id: string): Promise<InstallResult> {
+  const res = await fetch(`${BASE}/build-chat/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  })
+  return res.json()
 }

@@ -105,11 +105,9 @@ function appendEvent(segments: Segment[], event: AgentStreamEvent): Segment[] {
   return withClosedThinking
 }
 
-function toArgs(value: unknown): Record<string, React.ReactNode> {
+function toArgs(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {}
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, v]) => [key, JSON.stringify(v)]),
-  )
+  return value as Record<string, unknown>
 }
 
 /**

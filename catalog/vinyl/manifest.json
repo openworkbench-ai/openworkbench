@@ -1,0 +1,181 @@
+{
+  "app": {
+    "description": "Track your owned records — artist, album, year, genre, Goldmine condition grade, and price paid — plus a wishlist for records you're hunting for.",
+    "emoji": "🎵",
+    "id": "vinyl",
+    "name": "Vinyl Collection",
+    "version": 1
+  },
+  "entities": [
+    {
+      "fields": [
+        {
+          "id": "fld_record_artist",
+          "max": 200,
+          "name": "artist",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_record_album",
+          "max": 200,
+          "name": "album",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_record_year",
+          "max": 2100,
+          "min": 1900,
+          "name": "year",
+          "type": "integer"
+        },
+        {
+          "id": "fld_record_genre",
+          "max": 100,
+          "name": "genre",
+          "type": "text"
+        },
+        {
+          "id": "fld_record_condition",
+          "name": "condition",
+          "type": "enum",
+          "values": [
+            "M",
+            "NM",
+            "VG+",
+            "VG",
+            "G",
+            "F",
+            "P"
+          ]
+        },
+        {
+          "id": "fld_record_price_paid",
+          "min": 0,
+          "name": "price_paid",
+          "type": "real"
+        },
+        {
+          "id": "fld_record_notes",
+          "max": 2000,
+          "name": "notes",
+          "type": "text"
+        }
+      ],
+      "id": "ent_record",
+      "name": "record"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_wishlist_artist",
+          "max": 200,
+          "name": "artist",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_wishlist_album",
+          "max": 200,
+          "name": "album",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "default": "medium",
+          "id": "fld_wishlist_priority",
+          "name": "priority",
+          "type": "enum",
+          "values": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        {
+          "id": "fld_wishlist_notes",
+          "max": 2000,
+          "name": "notes",
+          "type": "text"
+        }
+      ],
+      "id": "ent_wishlist",
+      "name": "wishlist"
+    }
+  ],
+  "tools": [
+    {
+      "description": "Log a newly purchased record: creates it in the collection with artist and album, plus optional year, genre, condition grade, price paid, and notes — in a single call.",
+      "id": "tool_log_purchase",
+      "name": "log_purchase",
+      "params": [
+        {
+          "id": "p_artist",
+          "name": "artist",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_album",
+          "name": "album",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_year",
+          "max": 2100,
+          "min": 1900,
+          "name": "year",
+          "type": "integer"
+        },
+        {
+          "id": "p_genre",
+          "name": "genre",
+          "type": "text"
+        },
+        {
+          "id": "p_condition",
+          "name": "condition",
+          "type": "enum",
+          "values": [
+            "M",
+            "NM",
+            "VG+",
+            "VG",
+            "G",
+            "F",
+            "P"
+          ]
+        },
+        {
+          "id": "p_price_paid",
+          "min": 0,
+          "name": "price_paid",
+          "type": "real"
+        },
+        {
+          "id": "p_notes",
+          "name": "notes",
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_record",
+          "id": "record",
+          "op": "create",
+          "set": {
+            "album": "$params.album",
+            "artist": "$params.artist",
+            "condition": "$params.condition",
+            "genre": "$params.genre",
+            "notes": "$params.notes",
+            "price_paid": "$params.price_paid",
+            "year": "$params.year"
+          }
+        }
+      ]
+    }
+  ]
+}

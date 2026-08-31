@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { NavLink } from "react-router-dom"
-import { LayoutGrid, MessageSquare } from "lucide-react"
+import { Hammer, LayoutGrid, MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { fetchApps } from "@/lib/api"
@@ -9,9 +9,10 @@ import { ThemeToggle } from "@/components/shell/theme-toggle"
 const destinations = [
   { to: "/", label: "Chat", icon: MessageSquare },
   { to: "/apps", label: "Apps", icon: LayoutGrid },
+  { to: "/build", label: "Build", icon: Hammer },
 ]
 
-/** Left rail: brand mark, the two screens this build ships, and app count. */
+/** Left rail: brand mark, the screens this build ships, and app count. */
 function Sidebar() {
   const [appCount, setAppCount] = useState<number | null>(null)
 

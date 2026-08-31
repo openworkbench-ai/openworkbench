@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { loadApps, loadCatalogApps, readSkills, type Capabilities, type LoadedApp } from "./app-loader.js";
 import { createPiAgentBackend, DEFAULT_MODEL_ID } from "./backends/pi.js";
+import { createBuildAgentBackend } from "./backends/build-agent.js";
 import type { AgentBackend } from "./agent-backend.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
@@ -123,6 +124,21 @@ async function main() {
 
   let backend: AgentBackend = await createAgentBackend(capabilities, DEFAULT_MODEL_ID);
   let streaming = false;
+
+  // The build agent never sees installed apps' capabilities -- its job is to
+  // produce a new app via its own scratch workspace, not use existing ones
+  // (see createBuildAgentBackend) -- so unlike `backend` above it has no
+  // reload path and is created once for the process lifetime. Its own
+  // `streaming` guard is independent of the chat backend's, so a build
+  // conversation and a regular chat conversation never block each other.
+  const buildBackend: AgentBackend = await createBuildAgentBackend(ENGINE_URL, DEFAULT_MODEL_ID);
+  let buildStreaming = false;
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, async () => {
+      await buildBackend.dispose?.();
+      process.exit(0);
+    });
+  }
 
   // Re-scans app.json/manifest.json from disk and rebuilds the agent backend
   // with whatever capabilities they now declare — the mechanism that lets an
@@ -286,6 +302,92 @@ async function main() {
           streaming = false;
           res.end();
         }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/build-chat") {
+        const { message } = JSON.parse(await readBody(req));
+        if (typeof message !== "string" || !message.trim()) {
+          sendJson(res, 400, { error: "message is required" });
+          return;
+        }
+        if (buildStreaming) {
+          sendJson(res, 409, { error: "the build agent is still responding to a previous message" });
+          return;
+        }
+
+        buildStreaming = true;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+
+        try {
+          await buildBackend.prompt(message, (event) => {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          });
+          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
+        } finally {
+          buildStreaming = false;
+          res.end();
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/build-chat/answer") {
+        const { toolCallId, answers } = JSON.parse(await readBody(req));
+        if (typeof toolCallId !== "string" || !toolCallId || !Array.isArray(answers)) {
+          sendJson(res, 400, { error: "toolCallId and answers are required" });
+          return;
+        }
+        const resolved = buildBackend.respondToTool?.(toolCallId, answers) ?? false;
+        if (!resolved) {
+          sendJson(res, 404, { error: `no pending question with toolCallId "${toolCallId}"` });
+          return;
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname.startsWith("/api/build-chat/draft/")) {
+        const id = url.pathname.slice("/api/build-chat/draft/".length);
+        const draft = id ? buildBackend.readDraft?.(id) ?? null : null;
+        if (!draft) {
+          sendJson(res, 404, { error: `no draft "${id}" in the build agent's workspace` });
+          return;
+        }
+        sendJson(res, 200, draft);
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/build-chat/install") {
+        const { id } = JSON.parse(await readBody(req));
+        if (typeof id !== "string" || !id) {
+          sendJson(res, 400, { error: "id is required" });
+          return;
+        }
+        if (!buildBackend.installDraft) {
+          sendJson(res, 501, { error: "this backend cannot install drafts" });
+          return;
+        }
+        const result = await buildBackend.installDraft(id);
+        if (result.ok) {
+          // installDraft just wrote a brand-new app straight into the engine's catalog dir --
+          // this process's own `apps`/`appsById` were built once at boot and have no entry for it
+          // yet, so /api/apps/:id/* would 404 until something reloads. Do that now so the app is
+          // visible the moment the frontend navigates to it, instead of only after a restart.
+          const reload = await reloadApps();
+          if (!reload.ok) {
+            sendJson(res, 200, { ...result, message: `${result.message} (catalog reload pending: ${reload.reason})` });
+            return;
+          }
+        }
+        sendJson(res, result.ok ? 200 : result.status, result);
         return;
       }
 

@@ -291,7 +291,7 @@ function EntityTable({
             {table.getRowModel().rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="px-3 py-6 text-center text-muted-foreground">
-                  No rows match “{globalFilter}”.
+                  {globalFilter ? `No rows match “${globalFilter}”.` : "No rows yet."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -381,8 +381,6 @@ function DataTab({ appId }: { appId: string }) {
           <Alert variant="destructive"><AlertDescription>{pageError}</AlertDescription></Alert>
         ) : !page ? (
           <Skeleton className="h-32" />
-        ) : page.data.length === 0 ? (
-          <Alert><AlertDescription>No rows in “{entityName}” yet.</AlertDescription></Alert>
         ) : (
           <EntityTable key={entityName} rows={page.data} columns={columns} totalOnServer={page.total} />
         )}

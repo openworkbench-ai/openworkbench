@@ -107,6 +107,76 @@ func TestSaveIDMismatchIs422(t *testing.T) {
 	}
 }
 
+const bookManifestWithUI = `{
+  "app": { "id": "books", "name": "Books", "version": 1 },
+  "entities": [ { "id": "ent_book", "name": "book", "fields": [
+    { "id": "fld_title", "name": "title", "type": "text", "required": true }
+  ]}],
+  "tools": [
+    { "id": "tool_create_book", "name": "create_book",
+      "params": [ { "id": "p_title", "name": "title", "type": "text", "required": true } ],
+      "steps": [ { "op": "create", "entity": "ent_book", "set": { "title": "$params.title" } } ],
+      "ui": { "component": "Book" }
+    }
+  ]
+}`
+
+func TestSaveWritesUIComponent(t *testing.T) {
+	h, catalogDir, _ := newTestServer(t)
+
+	body := `{
+	  "manifest": ` + bookManifestWithUI + `,
+	  "ui": [{ "name": "Book", "html": "<html>book</html>" }]
+	}`
+	rec := doRequestWithBody(t, h, "PUT", "/admin/apps/books", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	written, err := os.ReadFile(filepath.Join(catalogDir, "books", "ui", "Book.html"))
+	if err != nil {
+		t.Fatalf("ui/Book.html not written: %v", err)
+	}
+	if string(written) != "<html>book</html>" {
+		t.Fatalf("ui/Book.html content = %q, want <html>book</html>", written)
+	}
+}
+
+func TestSaveRejectsMissingUIComponent(t *testing.T) {
+	h, catalogDir, _ := newTestServer(t)
+
+	body := `{ "manifest": ` + bookManifestWithUI + ` }`
+	rec := doRequestWithBody(t, h, "PUT", "/admin/apps/books", body)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body = %s", rec.Code, rec.Body.String())
+	}
+	var respBody struct {
+		Error struct{ Code string } `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &respBody); err != nil {
+		t.Fatal(err)
+	}
+	if respBody.Error.Code != "missing_ui_component" {
+		t.Fatalf("error code = %q, want missing_ui_component", respBody.Error.Code)
+	}
+	if _, err := os.Stat(filepath.Join(catalogDir, "books")); !os.IsNotExist(err) {
+		t.Fatalf("app dir should not exist, stat err = %v", err)
+	}
+}
+
+func TestSaveRejectsMalformedUIComponentName(t *testing.T) {
+	h, _, _ := newTestServer(t)
+
+	body := `{
+	  "manifest": ` + bookManifestWithUI + `,
+	  "ui": [{ "name": "../etc", "html": "nope" }]
+	}`
+	rec := doRequestWithBody(t, h, "PUT", "/admin/apps/books", body)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestSaveRejectsPathTraversalSkillName(t *testing.T) {
 	h, catalogDir, _ := newTestServer(t)
 

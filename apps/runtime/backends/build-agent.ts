@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -9,7 +10,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { AgentBackend, AppDraft } from "../agent-backend.js";
+import { extractUiResource, type AgentBackend, type AppDraft } from "../agent-backend.js";
 import { createBuildTools, readAppBundle, saveAndInstall } from "../build-tools.js";
 
 const MODEL_PROVIDER = "openrouter";
@@ -35,8 +36,23 @@ workflow before drafting anything. In short:
    full list with updated statuses -- as you work through them.
 3. Draft \`<id>/manifest.json\` (and optionally \`<id>/skills/\`,
    \`<id>/data/\`).
-4. Call \`validate_app\` until it reports no errors.
-5. Call \`present_app\` to hand the finished, validated draft to the user as
+4. For every entity that should have a real visual presence in chat (not
+   just internal bookkeeping data), write \`<id>/ui/components/<Name>.tsx\`
+   -- a React component in the app's own look and feel, built from
+   \`@openworkbench/app-ui-kit\`'s primitives (Card, Badge, Stat, Heading,
+   Muted, Table) plus your own Tailwind classes, themed via the
+   \`--app-accent\` CSS variable the kit seeds from the app's own
+   \`manifest.json\` \`app.color\`. It receives that entity's row as props --
+   import the generated types from \`../generated/entities.d.ts\` (written
+   automatically the first time you call \`validate_app\`) rather than
+   guessing field names. Then set that tool's \`"ui": { "component": "<Name>" }\`
+   in manifest.json (any tool returning/creating that entity can share the
+   same component). Skip this for tools whose result doesn't need a visual
+   presence -- \`ui\` is optional per tool.
+5. Call \`validate_app\` until it reports no errors -- this also
+   type-checks every \`ui/components/*.tsx\` file and will tell you exactly
+   what's wrong if a component doesn't compile.
+6. Call \`present_app\` to hand the finished, validated draft to the user as
    a review card. This does NOT install it -- installing is the user's own
    action, from a button on that card. Your job ends once you've presented
    a valid draft; if the user then asks for changes, edit the files,
@@ -71,6 +87,11 @@ export async function createBuildAgentBackend(
 
   const workspaceRoot = mkdtempSync(join(tmpdir(), "owb-build-"));
   writeFileSync(join(workspaceRoot, "AGENTS.md"), AGENTS_MD);
+  // A symlink, not a per-session `npm install`: any <id>/ui/components/*.tsx
+  // the agent writes imports "@openworkbench/app-ui-kit" as a bare
+  // specifier, resolved by Node/Vite/tsc walking up from the component's own
+  // directory looking for a node_modules -- this is the one they'll find.
+  symlinkSync(fileURLToPath(new URL("../../../node_modules", import.meta.url)), join(workspaceRoot, "node_modules"));
 
   const modelRuntime = await ModelRuntime.create({
     modelsPath: new URL("../../../pi/models.json", import.meta.url).pathname,
@@ -116,7 +137,14 @@ export async function createBuildAgentBackend(
         } else if (event.type === "tool_execution_start") {
           onEvent({ type: "tool_start", toolCallId: event.toolCallId, toolName: event.toolName, args: event.args });
         } else if (event.type === "tool_execution_end") {
-          onEvent({ type: "tool_end", toolCallId: event.toolCallId, toolName: event.toolName, isError: event.isError });
+          onEvent({
+            type: "tool_end",
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            result: event.result,
+            isError: event.isError,
+            ...extractUiResource(event.result),
+          });
         }
       });
       try {

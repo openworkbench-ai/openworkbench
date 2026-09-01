@@ -1,9 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { loadApps, loadCatalogApps, readSkills, type Capabilities, type LoadedApp } from "./app-loader.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { loadApps, loadCatalogApps, readSkills, type Capabilities, type LoadedApp, type McpServerConfig } from "./app-loader.js";
 import { createPiAgentBackend, DEFAULT_MODEL_ID } from "./backends/pi.js";
 import { createBuildAgentBackend } from "./backends/build-agent.js";
+import { resolveHeaders } from "./mcp-tools.js";
 import type { AgentBackend } from "./agent-backend.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
@@ -92,6 +95,32 @@ function matchAppRoute(pathname: string): AppRouteMatch | null {
     return { kind: "data", id, entity: segments[4] };
   }
   return null;
+}
+
+/** Matches `/api/apps/:id/mcp-resource` (GET) and `/api/apps/:id/mcp-call` (POST) --
+ * the MCP-Apps host's own proxy into that app's real MCP server. A rendered
+ * widget's iframe can't reach the engine directly (no MCP client, no CORS story
+ * of its own), so it fetches its ui:// resource and calls tools back through
+ * these, exactly the same way the chat agent's `mcp` proxy tool does. */
+function matchMcpProxyRoute(pathname: string): { id: string; kind: "resource" | "call" } | null {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length !== 4 || segments[0] !== "api" || segments[1] !== "apps" || !segments[2]) return null;
+  if (segments[3] === "mcp-resource") return { id: segments[2], kind: "resource" };
+  if (segments[3] === "mcp-call") return { id: segments[2], kind: "call" };
+  return null;
+}
+
+/** Opens a short-lived MCP client against one app's server -- cheap since
+ * engine/mcpserver is stateless, and avoids reaching into the chat backend's
+ * own long-lived `mcp` proxy tool (which is rebuilt wholesale on every
+ * `reloadApps()` and isn't exposed outside its own closure). */
+async function connectAppMcpClient(server: McpServerConfig): Promise<Client> {
+  const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+    requestInit: { headers: resolveHeaders(server.headers) },
+  });
+  const client = new Client({ name: "openworkbench-host", version: "0.1.0" });
+  await client.connect(transport);
+  return client;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -253,6 +282,43 @@ async function main() {
           res.end(body);
           return;
         }
+      }
+
+      const mcpProxyMatch = matchMcpProxyRoute(url.pathname);
+      if (mcpProxyMatch && ((req.method === "GET" && mcpProxyMatch.kind === "resource") || (req.method === "POST" && mcpProxyMatch.kind === "call"))) {
+        const mcpServer = capabilities.mcpServers.find((s) => s.name === mcpProxyMatch.id);
+        if (!mcpServer) {
+          sendJson(res, 404, { error: `unknown app "${mcpProxyMatch.id}"` });
+          return;
+        }
+
+        const client = await connectAppMcpClient(mcpServer);
+        try {
+          if (mcpProxyMatch.kind === "resource") {
+            const uri = url.searchParams.get("uri");
+            if (!uri) {
+              sendJson(res, 400, { error: "uri query param is required" });
+              return;
+            }
+            const result = await client.readResource({ uri });
+            sendJson(res, 200, result);
+          } else {
+            const { tool, args } = JSON.parse(await readBody(req));
+            if (typeof tool !== "string" || !tool) {
+              sendJson(res, 400, { error: "tool is required" });
+              return;
+            }
+            // A tool-level failure comes back as CallToolResult.isError, not an HTTP
+            // error -- same convention engine/mcpserver uses -- so the widget (or
+            // AppBridge's oncalltool, forwarding this straight to the view) sees a
+            // normal result it can render an error state from, not a fetch rejection.
+            const result = await client.callTool({ name: tool, arguments: args ?? {} });
+            sendJson(res, 200, result);
+          }
+        } finally {
+          await client.close();
+        }
+        return;
       }
 
       if (req.method === "GET" && url.pathname === "/api/models") {

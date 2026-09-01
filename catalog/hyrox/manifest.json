@@ -75,7 +75,8 @@
           "entity": "ent_workout",
           "set": { "plan": "$steps.plan.id", "name": "$params.workout_name" }
         }
-      ]
+      ],
+      "ui": { "component": "PlanCreated" }
     },
     {
       "id": "tool_add_workout",
@@ -91,7 +92,8 @@
           "entity": "ent_workout",
           "set": { "plan": "$params.plan_id", "name": "$params.workout_name" }
         }
-      ]
+      ],
+      "ui": { "component": "WorkoutCard" }
     },
     {
       "id": "tool_add_exercise",
@@ -120,7 +122,8 @@
             "target_seconds": "$params.target_seconds"
           }
         }
-      ]
+      ],
+      "ui": { "component": "ExerciseCard" }
     },
     {
       "id": "tool_read_workout",
@@ -132,7 +135,8 @@
       "steps": [
         { "id": "workout", "op": "read", "entity": "ent_workout", "rowId": "$params.workout_id" },
         { "id": "exercises", "op": "list", "entity": "ent_exercise", "filter": { "workout": "$params.workout_id" } }
-      ]
+      ],
+      "ui": { "component": "WorkoutDetail" }
     },
     {
       "id": "tool_list_workout",
@@ -140,7 +144,8 @@
       "description": "List all workouts across every plan",
       "steps": [
         { "op": "list", "entity": "ent_workout" }
-      ]
+      ],
+      "ui": { "component": "WorkoutList" }
     },
     {
       "id": "tool_list_exercise",
@@ -148,7 +153,8 @@
       "description": "List all exercises across every workout",
       "steps": [
         { "op": "list", "entity": "ent_exercise" }
-      ]
+      ],
+      "ui": { "component": "ExerciseList" }
     },
     {
       "id": "tool_log_exercise_result",
@@ -179,7 +185,8 @@
           "rowId": "$params.exercise_id",
           "set": { "status": "completed" }
         }
-      ]
+      ],
+      "ui": { "component": "ResultLogged" }
     }
   ]
 }

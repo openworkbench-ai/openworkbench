@@ -1,0 +1,32 @@
+{
+  "name": "@openworkbench/app-ui-kit",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Fixed infra for app-rendered MCP Apps components: the App-bridge bootstrap, a trimmed design-system primitive set, and the build/codegen tools that turn an app's ui/components/*.tsx into served MCP Apps resources. Not agent-authored.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shell": "./src/shell.tsx",
+    "./theme.css": "./src/theme.css",
+    "./build": "./build/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.1.12",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

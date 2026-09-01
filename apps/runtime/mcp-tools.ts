@@ -21,6 +21,9 @@ interface McpToolInfo {
   name: string;
   description: string;
   inputSchema: unknown;
+  /** From this tool's `_meta.ui.resourceUri` (the MCP Apps extension) -- set when the
+   * app declared a `ui.component` for it in manifest.json (see engine/mcpserver). */
+  uiResourceUri?: string;
 }
 
 interface ConnectedServer {
@@ -31,7 +34,7 @@ interface ConnectedServer {
   error?: string;
 }
 
-function resolveHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+export function resolveHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
   if (!headers) return undefined;
   return Object.fromEntries(
     Object.entries(headers).map(([key, value]) => {
@@ -58,11 +61,15 @@ async function connectServer(config: McpServerConfig): Promise<ConnectedServer> 
       name: config.name,
       url: config.url,
       client,
-      tools: tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description ?? "",
-        inputSchema: tool.inputSchema,
-      })),
+      tools: tools.map((tool) => {
+        const ui = (tool._meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
+        return {
+          name: tool.name,
+          description: tool.description ?? "",
+          inputSchema: tool.inputSchema,
+          uiResourceUri: typeof ui?.resourceUri === "string" ? ui.resourceUri : undefined,
+        };
+      }),
     };
   } catch (error) {
     return {
@@ -161,6 +168,7 @@ async function callTool(
   }
 
   const server = candidates[0];
+  const matchedTool = server.tools.find((t) => t.name === toolName);
   const result = await server.client!.callTool({ name: toolName, arguments: args ?? {} });
   const rawContent = "content" in result && Array.isArray(result.content) ? result.content : [];
   const content = rawContent.map((block: { type: string; text?: string; data?: string; mimeType?: string }) => {
@@ -178,7 +186,7 @@ async function callTool(
   }
   return {
     content: content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }],
-    details: result,
+    details: { ...result, server: server.name, uiResourceUri: matchedTool?.uiResourceUri },
   };
 }
 

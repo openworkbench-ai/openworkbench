@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Sparkles } from "lucide-react"
 
 import { fetchApps, fetchModels, streamChat, switchModel, type AgentStreamEvent, type AppInfo, type ModelInfo } from "@/lib/api"
+import { usePersistedState } from "@/lib/persisted-state"
 import { PageHeader } from "@/components/shell/page-header"
 import {
   Conversation,
@@ -24,6 +25,8 @@ import { Markdown } from "@/components/ui/markdown"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StreamingCaret } from "@/components/ui/streaming"
 import { Thinking } from "@/components/ui/thinking"
+import { CodeBlock } from "@/components/ui/code-block"
+import { McpAppFrame } from "@/components/ui/mcp-app-frame"
 import { ToolCall, ToolCallArgs, ToolCallPanel } from "@/components/ui/tool-call"
 import { Heading, Muted } from "@/components/ui/typography"
 
@@ -34,11 +37,13 @@ type Segment =
       toolCallId: string
       toolName: string
       args: unknown
+      result?: unknown
       status: "running" | "success" | "error"
       startedAt: number
       durationMs?: number
     }
   | { kind: "text"; text: string }
+  | { kind: "widget"; toolCallId: string; appId: string; resourceUri: string; result: unknown }
 
 type Turn =
   | { id: string; role: "user"; text: string }
@@ -95,19 +100,46 @@ function appendEvent(segments: Segment[], event: AgentStreamEvent): Segment[] {
   }
 
   if (event.type === "tool_end") {
-    return withClosedThinking.map((s) =>
+    const mapped: Segment[] = withClosedThinking.map((s) =>
       s.kind === "tool" && s.toolCallId === event.toolCallId
-        ? { ...s, status: event.isError ? "error" : "success", durationMs: Date.now() - s.startedAt }
+        ? { ...s, status: event.isError ? "error" : "success", result: event.result, durationMs: Date.now() - s.startedAt }
         : s,
     )
+    if (event.resourceUri && event.appId && !event.isError) {
+      return [
+        ...mapped,
+        {
+          kind: "widget",
+          toolCallId: event.toolCallId,
+          appId: event.appId,
+          resourceUri: event.resourceUri,
+          result: toolResultDetails(event.result),
+        },
+      ]
+    }
+    return mapped
   }
 
   return withClosedThinking
 }
 
+/** The tool's actual CallToolResult lives at result.details (see mcp-tools.ts's
+ * callTool) -- the outer AgentToolResult wrapper is a Pi-framework concept the
+ * widget itself has no use for. */
+function toolResultDetails(result: unknown): unknown {
+  if (!result || typeof result !== "object") return undefined
+  return (result as { details?: unknown }).details
+}
+
 function toArgs(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {}
   return value as Record<string, unknown>
+}
+
+/** A tool's return value, of whatever shape the tool produced — shown as text or pretty JSON. */
+function ToolCallResult({ result }: { result: unknown }) {
+  if (typeof result === "string") return <CodeBlock code={result} language="text" />
+  return <CodeBlock code={JSON.stringify(result, null, 2)} language="json" />
 }
 
 /**
@@ -163,9 +195,30 @@ function newId() {
   return Math.random().toString(36).slice(2)
 }
 
+/** A turn left `streaming` by a reload mid-response has no controller to finish it -- close it out as
+ * interrupted so it doesn't render as stuck forever once restored from sessionStorage. */
+function sealInterruptedTurns(turns: Turn[]): Turn[] {
+  return turns.map((turn) => {
+    if (turn.role !== "assistant" || !turn.streaming) return turn
+    return {
+      ...turn,
+      streaming: false,
+      finishedAt: turn.finishedAt ?? Date.now(),
+      error: turn.error ?? "Interrupted — the page reloaded before this response finished.",
+      segments: turn.segments.map((s) =>
+        s.kind === "thinking" && s.streaming
+          ? { ...s, streaming: false }
+          : s.kind === "tool" && s.status === "running"
+            ? { ...s, status: "error" as const }
+            : s,
+      ),
+    }
+  })
+}
+
 function AgentPage() {
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [draft, setDraft] = useState("")
+  const [turns, setTurns] = usePersistedState<Turn[]>("owb.agent.turns", [], sealInterruptedTurns)
+  const [draft, setDraft] = usePersistedState("owb.agent.draft", "")
   const [streaming, setStreaming] = useState(false)
   const [models, setModels] = useState<ModelInfo[]>([])
   const [currentModel, setCurrentModel] = useState<string>("")
@@ -310,6 +363,11 @@ function AgentPage() {
                             <ToolCallPanel label="Arguments">
                               <ToolCallArgs args={toArgs(segment.args)} />
                             </ToolCallPanel>
+                            {segment.result !== undefined ? (
+                              <ToolCallPanel label="Result">
+                                <ToolCallResult result={segment.result} />
+                              </ToolCallPanel>
+                            ) : null}
                           </ToolCall>
                         )
                       }
@@ -340,6 +398,11 @@ function AgentPage() {
                                   <ToolCallPanel label="Arguments">
                                     <ToolCallArgs args={toArgs(segment.args)} />
                                   </ToolCallPanel>
+                                  {segment.result !== undefined ? (
+                                    <ToolCallPanel label="Result">
+                                      <ToolCallResult result={segment.result} />
+                                    </ToolCallPanel>
+                                  ) : null}
                                 </ToolCall>
                               ))}
                             </div>
@@ -358,6 +421,17 @@ function AgentPage() {
                         >
                           <p>{segment.text}</p>
                         </Thinking>
+                      )
+                    }
+                    if (segment.kind === "widget") {
+                      return (
+                        <McpAppFrame
+                          key={`${segment.toolCallId}-widget`}
+                          className="mt-3"
+                          appId={segment.appId}
+                          resourceUri={segment.resourceUri}
+                          toolResult={segment.result}
+                        />
                       )
                     }
                     const isLast = index === all.length - 1

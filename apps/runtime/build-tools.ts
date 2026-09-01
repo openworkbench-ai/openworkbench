@@ -1,7 +1,12 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { buildAppUI, generateEntityTypes } from "@openworkbench/app-ui-kit/build";
 import { Type } from "typebox";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * The build agent's four custom tools: two human-in-the-loop tools that
@@ -77,6 +82,87 @@ export function readAppBundle(workspaceRoot: string, id: string): AppBundle | { 
   return { manifestRaw, skills, data };
 }
 
+export interface AppUIComponent {
+  name: string;
+  html: string;
+}
+
+/**
+ * Type-checks `<id>/ui/components/*.tsx` against the generated entity prop
+ * types and the design kit's own types, without emitting anything. Vite's
+ * own build (below) only strips types via esbuild -- it would happily
+ * "succeed" on a component with the wrong prop name, so this is the actual
+ * correctness gate, the same way validate_app is for manifest.json.
+ */
+async function typecheckAppUI(appDir: string): Promise<{ ok: true } | { ok: false; output: string }> {
+  const tsconfigPath = join(appDir, "ui", ".tsconfig.generated.json");
+  writeFileSync(
+    tsconfigPath,
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        lib: ["ES2022", "DOM"],
+        module: "ESNext",
+        moduleResolution: "bundler",
+        jsx: "react-jsx",
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        esModuleInterop: true,
+      },
+      include: ["components/**/*.tsx", "generated/**/*.d.ts"],
+    }),
+    "utf-8"
+  );
+
+  try {
+    await execFileAsync(join(appDir, "..", "node_modules", ".bin", "tsc"), ["--noEmit", "-p", tsconfigPath]);
+    return { ok: true };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message: string };
+    return { ok: false, output: (e.stdout || e.stderr || e.message).trim() };
+  }
+}
+
+/**
+ * Runs the full ui/ pipeline for one drafted app: regenerate entity prop
+ * types from its manifest, type-check every component against them, then
+ * (only if that passes) compile each into a self-contained MCP Apps HTML
+ * bundle via @openworkbench/app-ui-kit. A no-op (`{ components: [] }`) for
+ * an app that declares no ui/components directory at all. Shared by
+ * validate_app/present_app (surfacing errors back to the agent) and
+ * saveAndInstall (bundling the built HTML into the install request).
+ */
+export async function buildAppUi(
+  workspaceRoot: string,
+  id: string
+): Promise<{ components: AppUIComponent[] } | { error: string }> {
+  const appDir = join(workspaceRoot, id);
+  if (!existsSync(join(appDir, "ui", "components"))) return { components: [] };
+
+  const manifestPath = join(appDir, "manifest.json");
+  let manifest: { app?: { color?: string } };
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  } catch (err) {
+    return { error: `"${id}/manifest.json" is not valid JSON: ${(err as Error).message}` };
+  }
+
+  generateEntityTypes(manifestPath, join(appDir, "ui", "generated", "entities.d.ts"));
+
+  const typechecked = await typecheckAppUI(appDir);
+  if (!typechecked.ok) {
+    return { error: `ui/components has type errors:\n${typechecked.output}` };
+  }
+
+  try {
+    const built = await buildAppUI({ appDir, accentColor: manifest.app?.color });
+    return { components: built.map((b) => ({ name: b.component, html: b.html })) };
+  } catch (err) {
+    return { error: `ui/components failed to build: ${(err as Error).message}` };
+  }
+}
+
 export interface AnsweredQuestion {
   id: string;
   answer: string | string[];
@@ -127,6 +213,9 @@ export async function saveAndInstall(
   const bundle = readAppBundle(workspaceRoot, id);
   if ("error" in bundle) return { ok: false, status: 400, message: bundle.error };
 
+  const ui = await buildAppUi(workspaceRoot, id);
+  if ("error" in ui) return { ok: false, status: 400, message: `UI build failed: ${ui.error}` };
+
   const saveRes = await fetch(`${engineUrl}/admin/apps/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -134,6 +223,7 @@ export async function saveAndInstall(
       manifest: JSON.parse(bundle.manifestRaw),
       skills: bundle.skills.length > 0 ? bundle.skills : undefined,
       data: bundle.data.length > 0 ? bundle.data : undefined,
+      ui: ui.components.length > 0 ? ui.components : undefined,
     }),
   });
   const saveBody = await saveRes.text();
@@ -255,8 +345,9 @@ export function createBuildTools(
     label: "Validate app",
     description:
       "Dry-run validate the manifest.json drafted at <workspace>/<id>/manifest.json against the engine's schema, " +
-      "without writing or installing anything. Safe to call repeatedly while iterating.",
-    promptSnippet: "validate_app({ id }) - check a drafted manifest against the engine before committing",
+      "and type-check any ui/components/*.tsx against the manifest's entities, without writing or installing " +
+      "anything. Safe to call repeatedly while iterating.",
+    promptSnippet: "validate_app({ id }) - check a drafted manifest (and any ui components) against the engine before committing",
     parameters: Type.Object({
       id: Type.String({ description: "The app id — matches the workspace subdirectory and manifest.json's app.id." }),
     }),
@@ -266,6 +357,8 @@ export function createBuildTools(
       }
       const result = await validateDraft(workspaceRoot, engineUrl, params.id);
       if ("error" in result) return textResult(result.error);
+      const ui = await buildAppUi(workspaceRoot, params.id);
+      if ("error" in ui) return textResult(`${result.body}\n\n${ui.error}`);
       return textResult(result.body);
     },
   });
@@ -289,6 +382,10 @@ export function createBuildTools(
       if ("error" in result) throw new Error(result.error);
       if (!result.valid) {
         throw new Error(`Draft is not valid yet -- fix these and re-validate before presenting: ${result.body}`);
+      }
+      const ui = await buildAppUi(workspaceRoot, params.id);
+      if ("error" in ui) {
+        throw new Error(`Draft's UI is not valid yet -- fix and re-validate before presenting: ${ui.error}`);
       }
       return textResult("Draft is valid; showing it to the user for review now.");
     },

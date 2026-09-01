@@ -6,6 +6,14 @@
 // per app at /mcp/{app_id}, resolved fresh from the registry on every
 // request so a redeployed app's tool set is visible immediately, with no
 // server restart.
+//
+// A tool that declares a UI component (schema.ToolUI) also gets a
+// _meta.ui.resourceUri pointing at a ui:// resource this same server serves
+// — the MCP Apps extension's mechanism for a host to render a real UI (built
+// by the app's own build agent, see packages/app-ui-kit) instead of raw
+// tool-call JSON. That resource is served straight off the built
+// ui/<component>.html file writeAppBundle staged in the app's catalog
+// directory; this package does no building of its own.
 package mcpserver
 
 import (
@@ -13,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,6 +32,10 @@ import (
 	"pocketknife/schema"
 	"pocketknife/tools"
 )
+
+// uiResourceMIMEType is the MCP Apps extension's required mime type for
+// ui:// HTML resources (see the apps.mdx specification's MVP profile).
+const uiResourceMIMEType = "text/html;profile=mcp-app"
 
 // NewServer builds the HTTP handler serving one MCP streamable-HTTP endpoint
 // per app at /mcp/{app_id}, exposing every tool that app's current manifest
@@ -67,14 +81,56 @@ func buildServer(reg *registry.Registry, ra *registry.RegisteredApp) *mcp.Server
 		Version: fmt.Sprintf("%d", ra.Schema.Version),
 	}, nil)
 
+	uiComponents := map[string]bool{}
 	for _, tool := range ra.Schema.Tools {
-		s.AddTool(&mcp.Tool{
+		t := &mcp.Tool{
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: inputSchema(tool.Params),
-		}, toolHandler(reg, ra.Schema.ID, tool.ID))
+		}
+		if tool.UI != nil {
+			t.Meta = mcp.Meta{"ui": map[string]any{"resourceUri": uiResourceURI(ra.Schema.ID, tool.UI.Component)}}
+			uiComponents[tool.UI.Component] = true
+		}
+		s.AddTool(t, toolHandler(reg, ra.Schema.ID, tool.ID))
 	}
+
+	// One resource per distinct component, not per tool: several tools (e.g.
+	// create_workout and get_workout) can share the same rendered component.
+	for component := range uiComponents {
+		s.AddResource(&mcp.Resource{
+			URI:      uiResourceURI(ra.Schema.ID, component),
+			Name:     component,
+			MIMEType: uiResourceMIMEType,
+		}, uiResourceHandler(ra.Dir, component))
+	}
+
 	return s
+}
+
+// uiResourceURI is the ui:// resource address for one app's built component,
+// matching what writeAppBundle staged at ui/<component>.html in the app's
+// own catalog directory (ra.Dir).
+func uiResourceURI(appID, component string) string {
+	return fmt.Sprintf("ui://%s/%s.html", appID, component)
+}
+
+// uiResourceHandler serves a built MCP Apps component straight off disk --
+// the same pattern skills use, read fresh per request so a redeployed app's
+// UI is visible immediately, with no server restart.
+func uiResourceHandler(appDir, component string) mcp.ResourceHandler {
+	path := filepath.Join(appDir, "ui", component+".html")
+	return func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		html, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read ui component %q: %w", component, err)
+		}
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{URI: req.Params.URI, MIMEType: uiResourceMIMEType, Text: string(html)},
+			},
+		}, nil
+	}
 }
 
 // toolHandler returns the mcp.ToolHandler for one declared tool: decode the

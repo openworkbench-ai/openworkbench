@@ -2,7 +2,35 @@ export type AgentStreamEvent =
   | { type: "text"; delta: string }
   | { type: "thinking"; delta: string }
   | { type: "tool_start"; toolCallId: string; toolName: string; args: unknown }
-  | { type: "tool_end"; toolCallId: string; toolName: string; isError: boolean };
+  | {
+      type: "tool_end";
+      toolCallId: string;
+      toolName: string;
+      result: unknown;
+      isError: boolean;
+      /** MCP Apps `_meta.ui.resourceUri`, when this call's tool declared one (see extractUiResource). */
+      resourceUri?: string;
+      /** Which installed app's MCP server resourceUri belongs to -- needed to fetch it. */
+      appId?: string;
+    };
+
+/**
+ * Pulls the MCP Apps `_meta.ui.resourceUri` (and originating app id) off a
+ * tool's result, when mcp-tools.ts's `callTool` attached one -- the signal
+ * both backends use to populate `tool_end`'s `resourceUri`/`appId` so the
+ * frontend can render a widget instead of a generic tool-call card. Returns
+ * `{}` for every other tool (native file tools, ask_questions, etc).
+ */
+export function extractUiResource(result: unknown): { resourceUri?: string; appId?: string } {
+  if (!result || typeof result !== "object") return {};
+  const details = (result as { details?: unknown }).details;
+  if (!details || typeof details !== "object") return {};
+  const d = details as { uiResourceUri?: unknown; server?: unknown };
+  return {
+    resourceUri: typeof d.uiResourceUri === "string" ? d.uiResourceUri : undefined,
+    appId: typeof d.server === "string" ? d.server : undefined,
+  };
+}
 
 /** A build agent's in-progress draft, read straight off its scratch workspace for the review card. */
 export interface AppDraft {

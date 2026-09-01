@@ -119,6 +119,24 @@ export async function fetchAppData(
   return asJson(await fetch(`${BASE}/apps/${id}/data/${entity}${suffix}`))
 }
 
+/** Fetches one app's MCP Apps `ui://` resource (a built component's HTML) through
+ * the runtime's proxy — the browser never reaches the engine's MCP endpoint directly. */
+export async function fetchAppMcpResource(id: string, uri: string): Promise<{ contents?: { text?: string }[] }> {
+  return asJson(await fetch(`${BASE}/apps/${id}/mcp-resource?uri=${encodeURIComponent(uri)}`))
+}
+
+/** Calls a tool on one app's MCP server, proxied the same way — used when a
+ * rendered component (McpAppFrame) calls back into a tool. */
+export async function callAppMcpTool(id: string, tool: string, args: Record<string, unknown> | undefined): Promise<unknown> {
+  return asJson(
+    await fetch(`${BASE}/apps/${id}/mcp-call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool, args }),
+    }),
+  )
+}
+
 export async function fetchModels(): Promise<{ models: ModelInfo[]; current: string }> {
   return asJson(await fetch(`${BASE}/models`))
 }
@@ -137,7 +155,15 @@ export type AgentStreamEvent =
   | { type: "text"; delta: string }
   | { type: "thinking"; delta: string }
   | { type: "tool_start"; toolCallId: string; toolName: string; args: unknown }
-  | { type: "tool_end"; toolCallId: string; toolName: string; isError: boolean }
+  | {
+      type: "tool_end"
+      toolCallId: string
+      toolName: string
+      result: unknown
+      isError: boolean
+      resourceUri?: string
+      appId?: string
+    }
   | { type: "done" }
   | { type: "error"; reason: string }
 

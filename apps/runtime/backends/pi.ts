@@ -3,7 +3,7 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import type { AgentBackend } from "../agent-backend.js";
+import { extractUiResource, type AgentBackend } from "../agent-backend.js";
 import type { Capabilities } from "../app-loader.js";
 import { createCapabilityProvider } from "./pi-capabilities.js";
 
@@ -56,7 +56,14 @@ export async function createPiAgentBackend(
         } else if (event.type === "tool_execution_start") {
           onEvent({ type: "tool_start", toolCallId: event.toolCallId, toolName: event.toolName, args: event.args });
         } else if (event.type === "tool_execution_end") {
-          onEvent({ type: "tool_end", toolCallId: event.toolCallId, toolName: event.toolName, isError: event.isError });
+          onEvent({
+            type: "tool_end",
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            result: event.result,
+            isError: event.isError,
+            ...extractUiResource(event.result),
+          });
         }
       });
       try {

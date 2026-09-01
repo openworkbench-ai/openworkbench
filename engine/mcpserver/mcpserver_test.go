@@ -166,6 +166,89 @@ func TestListToolsAndCall(t *testing.T) {
 	}
 }
 
+func TestToolUIResourceIsAdvertisedAndServed(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "reading_tracker")
+	if err := os.MkdirAll(filepath.Join(dir, "ui"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+      "app": { "id": "reading_tracker", "name": "Reading Tracker", "version": 1 },
+      "entities": [
+        { "id": "ent_book", "name": "book", "fields": [
+          { "id": "fld_title", "name": "title", "type": "text", "required": true }
+        ]}
+      ],
+      "tools": [
+        { "id": "tool_create_book", "name": "create_book",
+          "params": [ { "id": "p_title", "name": "title", "type": "text", "required": true } ],
+          "steps": [ { "op": "create", "entity": "ent_book", "set": { "title": "$params.title" } } ],
+          "ui": { "component": "Book" }
+        }
+      ]
+    }`
+	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const bookHTML = "<!doctype html><html><body>Book component</body></html>"
+	if err := os.WriteFile(filepath.Join(dir, "ui", "Book.html"), []byte(bookHTML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg, results, err := registry.Load(root, root)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	for _, r := range results {
+		if !r.OK {
+			t.Fatalf("app %s failed to load: errors=%v err=%v", r.ManifestPath, r.Errors, r.Err)
+		}
+	}
+	t.Cleanup(func() { reg.Close() })
+
+	ts := httptest.NewServer(mcpserver.NewServer(reg))
+	defer ts.Close()
+
+	session := connect(t, ts.URL+"/mcp/reading_tracker")
+	ctx := context.Background()
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	var createBook *mcp.Tool
+	for _, tl := range listed.Tools {
+		if tl.Name == "create_book" {
+			createBook = tl
+		}
+	}
+	if createBook == nil {
+		t.Fatal("create_book tool missing")
+	}
+	ui, _ := createBook.Meta["ui"].(map[string]any)
+	if ui == nil {
+		t.Fatalf("tool has no _meta.ui: %+v", createBook.Meta)
+	}
+	resourceURI, _ := ui["resourceUri"].(string)
+	if resourceURI != "ui://reading_tracker/Book.html" {
+		t.Fatalf("resourceUri = %q, want ui://reading_tracker/Book.html", resourceURI)
+	}
+
+	read, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: resourceURI})
+	if err != nil {
+		t.Fatalf("read resource: %v", err)
+	}
+	if len(read.Contents) != 1 {
+		t.Fatalf("got %d contents, want 1", len(read.Contents))
+	}
+	if read.Contents[0].MIMEType != "text/html;profile=mcp-app" {
+		t.Fatalf("mimeType = %q, want text/html;profile=mcp-app", read.Contents[0].MIMEType)
+	}
+	if read.Contents[0].Text != bookHTML {
+		t.Fatalf("resource text = %q, want %q", read.Contents[0].Text, bookHTML)
+	}
+}
+
 func TestCallToolWithNamedStepsReturnsEveryStep(t *testing.T) {
 	reg := bootApp(t, "tasks", tasksManifest)
 	ts := httptest.NewServer(mcpserver.NewServer(reg))

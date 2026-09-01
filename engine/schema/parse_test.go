@@ -77,6 +77,38 @@ func TestParseValidManifestRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseToolUIComponent(t *testing.T) {
+	app := mustParse(t, `{
+      "app": { "id": "reading_tracker", "name": "Reading Tracker", "version": 1 },
+      "entities": [
+        { "id": "ent_book", "name": "book", "fields": [
+          { "id": "fld_title", "name": "title", "type": "text" }
+        ]}
+      ],
+      "tools": [
+        { "id": "tool_get_book", "name": "get_book", "steps": [
+            { "op": "read", "entity": "ent_book", "rowId": "$params.id" }
+          ],
+          "ui": { "component": "Book" }
+        },
+        { "id": "tool_list_books", "name": "list_books", "steps": [
+            { "op": "list", "entity": "ent_book" }
+          ]
+        }
+      ]
+    }`)
+
+	withUI := app.Tool("get_book")
+	if withUI == nil || withUI.UI == nil || withUI.UI.Component != "Book" {
+		t.Fatalf("tool.ui.component not parsed correctly: %+v", withUI)
+	}
+
+	withoutUI := app.Tool("list_books")
+	if withoutUI == nil || withoutUI.UI != nil {
+		t.Fatalf("tool without ui should have nil UI: %+v", withoutUI)
+	}
+}
+
 func TestParseMalformedJSONIsWrappedError(t *testing.T) {
 	_, err := schema.Parse([]byte(`{ not json `))
 	if err == nil {

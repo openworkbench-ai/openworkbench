@@ -173,6 +173,16 @@ type Tool struct {
 	// an MCP client gets a real JSON Schema for its call arguments.
 	Params []*Field
 	Steps  []*ToolStep
+	// UI, if set, renders this tool's result via an agent-authored React
+	// component (served as an MCP Apps ui:// resource) instead of raw JSON.
+	UI *ToolUI
+}
+
+// ToolUI names the component that renders a tool's result. Component
+// resolves to ui/components/<Component>.tsx in the app's bundle, built to
+// ui/dist/<Component>.html and served at ui://<app_id>/<Component>.html.
+type ToolUI struct {
+	Component string
 }
 
 // Tool returns the tool with the given name, or nil.

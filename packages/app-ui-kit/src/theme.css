@@ -1,0 +1,96 @@
+/* No `@import "tailwindcss"` here on purpose: this file is imported into a
+   dynamically generated entry stylesheet (see build/build-app-ui.ts) that
+   owns the single `@import "tailwindcss" source(none)` plus the `@source`
+   directives pointing at that specific build's component directory --
+   Tailwind v4's automatic source detection walks the filesystem from
+   wherever the importing CSS file lives, not the JS module graph, so it can
+   never find an app's ui/components/*.tsx (or this package's own src/ui/)
+   sitting outside that directory on its own. */
+
+/* ============================================================================
+   Trimmed copy of apps/web's design tokens, for components rendered inside
+   an MCP Apps iframe (standalone bundle — no access to the host page's CSS).
+   Keep in sync with apps/web/src/styles/globals.css by eye; this is a subset,
+   not a generated artifact.
+   ========================================================================== */
+
+:root {
+  --paper-50: #fdfcf6;
+  --paper-100: #faf8ee;
+  --paper-200: #f2efe1;
+  --fern-800: #22301b;
+
+  --background: var(--paper-100);
+  --foreground: var(--fern-800);
+  --card: var(--paper-50);
+  --card-foreground: var(--fern-800);
+  --primary: #35482a;
+  --primary-foreground: var(--paper-50);
+  --muted: var(--paper-200);
+  --muted-foreground: #6f7a63;
+  --destructive: #b23b23;
+  --destructive-foreground: var(--paper-50);
+  --border: #d8d3c1;
+
+  /* Seeded per-app from manifest.json's app.color/emoji at build time (see
+     build/build-app-ui.ts) — the "look and feel of the app" hook. Falls back
+     to the primary token when an app declares no color. */
+  --app-accent: var(--primary);
+  --app-accent-foreground: var(--primary-foreground);
+
+  --radius: 0.75rem;
+  --shadow-color: 34 43 26;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-foreground: var(--app-accent-foreground);
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-xs: calc(var(--radius) - 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --shadow-paper: 0 1px 2px rgb(var(--shadow-color) / 0.05), 0 8px 24px -12px rgb(var(--shadow-color) / 0.18);
+  --shadow-lift: 0 2px 4px rgb(var(--shadow-color) / 0.06), 0 18px 40px -18px rgb(var(--shadow-color) / 0.28);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+}

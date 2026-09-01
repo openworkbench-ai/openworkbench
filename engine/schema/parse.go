@@ -78,6 +78,11 @@ type rawTool struct {
 	Description string        `json:"description"`
 	Params      []rawField    `json:"params"`
 	Steps       []rawToolStep `json:"steps"`
+	UI          *rawToolUI    `json:"ui"`
+}
+
+type rawToolUI struct {
+	Component string `json:"component"`
 }
 
 type rawToolStep struct {
@@ -161,6 +166,9 @@ func Parse(data []byte) (*App, error) {
 
 	for _, rt := range raw.Tools {
 		tool := &Tool{ID: rt.ID, Name: rt.Name, Description: rt.Description}
+		if rt.UI != nil {
+			tool.UI = &ToolUI{Component: rt.UI.Component}
+		}
 		for _, rp := range rt.Params {
 			p, err := parseField(rp)
 			if err != nil {

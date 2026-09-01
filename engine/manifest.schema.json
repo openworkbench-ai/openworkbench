@@ -52,6 +52,19 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/toolStep" }
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Renders this tool's result via an agent-authored React component instead of raw JSON, served as an MCP Apps ui:// resource.",
+          "required": ["component"],
+          "properties": {
+            "component": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+              "description": "Name of the component in ui/components/<component>.tsx (built to ui/dist/<component>.html)."
+            }
+          }
         }
       }
     },

@@ -37,11 +37,24 @@ type saveDataFile struct {
 	Rows   []json.RawMessage `json:"rows"`
 }
 
-type saveRequest struct {
-	Manifest json.RawMessage `json:"manifest"`
-	Skills   []saveSkill     `json:"skills,omitempty"`
-	Data     []saveDataFile  `json:"data,omitempty"`
+// saveUIComponent is one tool's built MCP Apps resource: the self-contained
+// HTML/JS bundle Vite produced from ui/components/<Name>.tsx (see
+// packages/app-ui-kit). Name must match a tool's manifest.json ui.component.
+type saveUIComponent struct {
+	Name string `json:"name"`
+	HTML string `json:"html"`
 }
+
+type saveRequest struct {
+	Manifest json.RawMessage   `json:"manifest"`
+	Skills   []saveSkill       `json:"skills,omitempty"`
+	Data     []saveDataFile    `json:"data,omitempty"`
+	UI       []saveUIComponent `json:"ui,omitempty"`
+}
+
+// uiComponentNamePattern mirrors manifest.schema.json's tool.ui.component
+// pattern -- Name becomes a filesystem path segment (ui/<name>.html).
+var uiComponentNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
 
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -93,6 +106,24 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	builtUI := make(map[string]bool, len(req.UI))
+	for _, ui := range req.UI {
+		if !uiComponentNamePattern.MatchString(ui.Name) {
+			writeError(w, http.StatusBadRequest, "invalid_ui_component_name",
+				fmt.Sprintf("ui component name %q must match ^[A-Za-z][A-Za-z0-9]*$", ui.Name))
+			return
+		}
+		builtUI[ui.Name] = true
+	}
+	for _, tool := range app.Tools {
+		if tool.UI != nil && !builtUI[tool.UI.Component] {
+			writeError(w, http.StatusUnprocessableEntity, "missing_ui_component",
+				fmt.Sprintf("tool %q declares ui.component %q, but no built ui/%s.html was submitted",
+					tool.Name, tool.UI.Component, tool.UI.Component))
+			return
+		}
+	}
+
 	if err := writeAppBundle(s.catalogDir, id, req); err != nil {
 		writeError(w, http.StatusInternalServerError, "save_failed", err.Error())
 		return
@@ -102,11 +133,12 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeAppBundle stages manifest.json, one skills/<name>/SKILL.md per skill,
-// and one data/<entity>.json per data entry in a fresh temp directory inside
-// catalogDir (so the final swap is a same-filesystem rename), then swaps it
-// in for catalogDir/<id>. Any previous contents are moved aside rather than
-// deleted until the swap is confirmed, so a failure partway through leaves
-// the previous app dir intact instead of half-overwritten.
+// one data/<entity>.json per data entry, and one ui/<name>.html per built MCP
+// Apps component in a fresh temp directory inside catalogDir (so the final
+// swap is a same-filesystem rename), then swaps it in for catalogDir/<id>.
+// Any previous contents are moved aside rather than deleted until the swap is
+// confirmed, so a failure partway through leaves the previous app dir intact
+// instead of half-overwritten.
 func writeAppBundle(catalogDir, id string, req saveRequest) error {
 	stagingDir, err := os.MkdirTemp(catalogDir, ".save-"+id+"-")
 	if err != nil {
@@ -150,6 +182,18 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 			}
 			if err := os.WriteFile(filepath.Join(dataDir, d.Entity+".json"), rowsOut, 0o644); err != nil {
 				return fmt.Errorf("write seed data for %q: %w", d.Entity, err)
+			}
+		}
+	}
+
+	if len(req.UI) > 0 {
+		uiDir := filepath.Join(stagingDir, "ui")
+		if err := os.Mkdir(uiDir, 0o755); err != nil {
+			return fmt.Errorf("create ui dir: %w", err)
+		}
+		for _, ui := range req.UI {
+			if err := os.WriteFile(filepath.Join(uiDir, ui.Name+".html"), []byte(ui.HTML), 0o644); err != nil {
+				return fmt.Errorf("write ui component %q: %w", ui.Name, err)
 			}
 		}
 	}

@@ -23,13 +23,18 @@ type LoadState = { kind: "loading" } | { kind: "error"; message: string } | { ki
  * respects), then mounts it in a sandboxed iframe and wires the App Bridge
  * so it receives the triggering tool's result and can call tools back.
  */
+const MIN_FRAME_HEIGHT = 80
+const MAX_FRAME_HEIGHT = 2000
+
 function McpAppFrame({ appId, resourceUri, toolResult, className }: McpAppFrameProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" })
+  const [frameHeight, setFrameHeight] = useState<number | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setState({ kind: "loading" })
+    setFrameHeight(null)
     fetchAppMcpResource(appId, resourceUri)
       .then((body) => {
         const html = body.contents?.[0]?.text
@@ -58,6 +63,9 @@ function McpAppFrame({ appId, resourceUri, toolResult, className }: McpAppFrameP
       const result = await callAppMcpTool(appId, params.name, params.arguments)
       return result as CallToolResult
     }
+    bridge.addEventListener("sizechange", ({ height }) => {
+      if (typeof height === "number") setFrameHeight(Math.min(Math.max(height, MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT))
+    })
 
     const transport = new PostMessageTransport(iframe.contentWindow, iframe.contentWindow)
     bridge.connect(transport).catch((error) => {
@@ -91,7 +99,8 @@ function McpAppFrame({ appId, resourceUri, toolResult, className }: McpAppFrameP
       title="App component"
       sandbox="allow-scripts"
       srcDoc={state.html}
-      className={cn("h-64 w-full rounded-lg border border-border bg-card", className)}
+      style={frameHeight != null ? { height: frameHeight } : undefined}
+      className={cn("w-full rounded-lg border border-border bg-card", frameHeight == null && "h-64", className)}
     />
   )
 }

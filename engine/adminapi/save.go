@@ -17,10 +17,11 @@ import (
 	"pocketknife/validate"
 )
 
-// maxSaveBytes bounds the request body. Bundles can include seed data, so
-// this is more generous than validateapi's manifest-only cap, but still
-// small: these are declarative documents, not file uploads.
-const maxSaveBytes = 4 << 20
+// maxSaveBytes bounds the request body. Bundles can include seed data and
+// built MCP Apps UI components -- each a full React+Tailwind runtime inlined
+// by vite-plugin-singlefile, easily several MB apiece once JSON-escaped -- so
+// this is far more generous than validateapi's manifest-only cap.
+const maxSaveBytes = 64 << 20
 
 // skillNamePattern is the same stableId-style shape lifecycle.ValidID checks
 // for app IDs, applied to a second caller-supplied identifier that also
@@ -64,9 +65,17 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer r.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxSaveBytes))
+	// Read one byte past the cap so an oversized body can be reported as
+	// "too large" rather than silently truncated into invalid JSON that
+	// then gets misreported as a missing "manifest" field.
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSaveBytes+1))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "could not read request body")
+		return
+	}
+	if len(body) > maxSaveBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "body_too_large",
+			fmt.Sprintf("request body exceeds the %d byte limit", maxSaveBytes))
 		return
 	}
 

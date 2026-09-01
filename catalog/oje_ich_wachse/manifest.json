@@ -1,0 +1,653 @@
+{
+  "app": {
+    "color": "#e07b39",
+    "description": "Begleite die mentalen Sprünge deiner Tochter nach dem Buch von Frans X. Plooij \u0026 Hetty van de Rijt: Sturmphasen erkennen, Fähigkeiten abhaken, Beobachtungen festhalten.",
+    "emoji": "🌱",
+    "id": "oje_ich_wachse",
+    "name": "Oje, ich wachse!",
+    "version": 1
+  },
+  "entities": [
+    {
+      "fields": [
+        {
+          "id": "fld_kind_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_kind_geburtsdatum",
+          "name": "geburtsdatum",
+          "type": "datetime"
+        }
+      ],
+      "id": "ent_kind",
+      "name": "kind"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_sprung_nummer",
+          "max": 10,
+          "min": 1,
+          "name": "nummer",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "fld_sprung_titel",
+          "name": "titel",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_thema",
+          "name": "thema",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_sprungwoche",
+          "max": 200,
+          "min": 1,
+          "name": "sprungwoche",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "fld_sprung_sturm_von",
+          "max": 200,
+          "min": 1,
+          "name": "sturm_von",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "fld_sprung_sturm_bis",
+          "max": 200,
+          "min": 1,
+          "name": "sturm_bis",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "default": "bevorstehend",
+          "id": "fld_sprung_status",
+          "name": "status",
+          "type": "enum",
+          "values": [
+            "bevorstehend",
+            "sturmphase",
+            "im_sprung",
+            "abgeschlossen"
+          ]
+        },
+        {
+          "id": "fld_sprung_zusammenfassung",
+          "name": "zusammenfassung",
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_neue_welt",
+          "name": "neue_welt",
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_hilfe",
+          "name": "hilfe",
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_eltern_notizen",
+          "name": "eltern_notizen",
+          "type": "text"
+        }
+      ],
+      "id": "ent_sprung",
+      "name": "sprung"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_faehigkeit_sprung",
+          "name": "sprung",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "fld_faehigkeit_beschreibung",
+          "name": "beschreibung",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "default": false,
+          "id": "fld_faehigkeit_gemeistert",
+          "name": "gemeistert",
+          "type": "boolean"
+        },
+        {
+          "id": "fld_faehigkeit_gemeistert_am",
+          "name": "gemeistert_am",
+          "type": "datetime"
+        },
+        {
+          "id": "fld_faehigkeit_notiz",
+          "name": "notiz",
+          "type": "text"
+        }
+      ],
+      "id": "ent_faehigkeit",
+      "name": "faehigkeit"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_beobachtung_sprung",
+          "name": "sprung",
+          "onDelete": "set_null",
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "fld_beobachtung_datum",
+          "name": "datum",
+          "type": "datetime"
+        },
+        {
+          "default": "neutral",
+          "id": "fld_beobachtung_stimmung",
+          "name": "stimmung",
+          "type": "enum",
+          "values": [
+            "sonnig",
+            "neutral",
+            "quengelig",
+            "klammernd",
+            "weinerlich"
+          ]
+        },
+        {
+          "id": "fld_beobachtung_notiz",
+          "name": "notiz",
+          "type": "text"
+        },
+        {
+          "id": "fld_beobachtung_neue_faehigkeiten",
+          "name": "neue_faehigkeiten",
+          "type": "text"
+        }
+      ],
+      "id": "ent_beobachtung",
+      "name": "beobachtung"
+    }
+  ],
+  "tools": [
+    {
+      "description": "Liest das Profil der Tochter (Name, Geburtsdatum). Die rowId bekommst du z.B. aus einem früheren Ergebnis oder vom Nutzer.",
+      "id": "tool_get_kind",
+      "name": "kind_lesen",
+      "params": [
+        {
+          "id": "p_kind",
+          "name": "kind",
+          "required": true,
+          "target": "ent_kind",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_kind",
+          "op": "read",
+          "rowId": "$params.kind"
+        }
+      ],
+      "ui": {
+        "component": "ChildCard"
+      }
+    },
+    {
+      "description": "Aktualisiert Name und/oder Geburtsdatum des Kinderprofils. Übergib beide Werte (den bisherigen Namen bei unverändertem Namen).",
+      "id": "tool_update_kind",
+      "name": "kind_aktualisieren",
+      "params": [
+        {
+          "id": "p_kind",
+          "name": "kind",
+          "required": true,
+          "target": "ent_kind",
+          "type": "reference"
+        },
+        {
+          "id": "p_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_geburtsdatum",
+          "name": "geburtsdatum",
+          "required": true,
+          "type": "datetime"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_kind",
+          "op": "update",
+          "rowId": "$params.kind",
+          "set": {
+            "geburtsdatum": "$params.geburtsdatum",
+            "name": "$params.name"
+          }
+        }
+      ],
+      "ui": {
+        "component": "ChildCard"
+      }
+    },
+    {
+      "description": "Listet alle 10 mentalen Sprünge mit Nummer, Thema, Sprungwoche, Sturmphasen-Fenster und aktuellem Status auf.",
+      "id": "tool_list_spruenge",
+      "name": "spruenge_auflisten",
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "LeapOverview"
+      }
+    },
+    {
+      "description": "Zeigt alle Details zu einem Sprung: Beschreibung, die neue Welt, Tipps zur Unterstützung und deine Notizen.",
+      "id": "tool_get_sprung",
+      "name": "sprung_anzeigen",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "read",
+          "rowId": "$params.sprung"
+        }
+      ],
+      "ui": {
+        "component": "LeapCard"
+      }
+    },
+    {
+      "description": "Setzt den Status eines Sprungs: bevorstehend, sturmphase (quengelige/klammernde/weinerliche Phase vor dem Sprung), im_sprung (neue Fähigkeiten zeigen sich) oder abgeschlossen.",
+      "id": "tool_update_sprung_status",
+      "name": "sprung_status_setzen",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "p_status",
+          "name": "status",
+          "required": true,
+          "type": "enum",
+          "values": [
+            "bevorstehend",
+            "sturmphase",
+            "im_sprung",
+            "abgeschlossen"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "update",
+          "rowId": "$params.sprung",
+          "set": {
+            "status": "$params.status"
+          }
+        }
+      ],
+      "ui": {
+        "component": "LeapCard"
+      }
+    },
+    {
+      "description": "Speichert deine eigenen Notizen oder Fragen zu einem Sprung (z.B. 'Wie helfe ich beim Klettern?'). Überschreibt die bisherige Notiz.",
+      "id": "tool_update_sprung_notizen",
+      "name": "sprung_notizen_speichern",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "p_notizen",
+          "name": "eltern_notizen",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "update",
+          "rowId": "$params.sprung",
+          "set": {
+            "eltern_notizen": "$params.eltern_notizen"
+          }
+        }
+      ],
+      "ui": {
+        "component": "LeapCard"
+      }
+    },
+    {
+      "description": "Listet alle Fähigkeiten/Merkmale eines Sprungs mit ihrem Abhaken-Status auf – inklusive Fortschrittsanzeige.",
+      "id": "tool_list_faehigkeiten",
+      "name": "faehigkeiten_auflisten",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_faehigkeit",
+          "filter": {
+            "sprung": "$params.sprung"
+          },
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "AbilityList"
+      }
+    },
+    {
+      "description": "Markiert eine Fähigkeit als gemeistert. Nur abhaken, wenn die Fähigkeit klar beobachtet wurde – nicht raten.",
+      "id": "tool_faehigkeit_abhaken",
+      "name": "faehigkeit_abhaken",
+      "params": [
+        {
+          "id": "p_faehigkeit",
+          "name": "faehigkeit",
+          "required": true,
+          "target": "ent_faehigkeit",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_faehigkeit",
+          "op": "update",
+          "rowId": "$params.faehigkeit",
+          "set": {
+            "gemeistert": true
+          }
+        }
+      ],
+      "ui": {
+        "component": "AbilityList"
+      }
+    },
+    {
+      "description": "Setzt eine versehentlich abgehakte Fähigkeit auf 'nicht gemeistert' zurück.",
+      "id": "tool_faehigkeit_zuruecksetzen",
+      "name": "faehigkeit_zuruecksetzen",
+      "params": [
+        {
+          "id": "p_faehigkeit",
+          "name": "faehigkeit",
+          "required": true,
+          "target": "ent_faehigkeit",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_faehigkeit",
+          "op": "update",
+          "rowId": "$params.faehigkeit",
+          "set": {
+            "gemeistert": false
+          }
+        }
+      ],
+      "ui": {
+        "component": "AbilityList"
+      }
+    },
+    {
+      "description": "Fügt einen Eintrag ins Beobachtungstagebuch hinzu: Datum, Stimmung (die 3C des Buchs: quengelig, klammernd, weinerlich – oder sonnig/neutral), Notiz und optional neue Fähigkeiten sowie Bezug zum aktuellen Sprung.",
+      "id": "tool_beobachtung_loggen",
+      "name": "beobachtung_loggen",
+      "params": [
+        {
+          "id": "p_datum",
+          "name": "datum",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "id": "p_stimmung",
+          "name": "stimmung",
+          "required": true,
+          "type": "enum",
+          "values": [
+            "sonnig",
+            "neutral",
+            "quengelig",
+            "klammernd",
+            "weinerlich"
+          ]
+        },
+        {
+          "id": "p_notiz",
+          "name": "notiz",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "p_neue",
+          "name": "neue_faehigkeiten",
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_beobachtung",
+          "op": "create",
+          "set": {
+            "datum": "$params.datum",
+            "neue_faehigkeiten": "$params.neue_faehigkeiten",
+            "notiz": "$params.notiz",
+            "sprung": "$params.sprung",
+            "stimmung": "$params.stimmung"
+          }
+        }
+      ],
+      "ui": {
+        "component": "ObservationCard"
+      }
+    },
+    {
+      "description": "Listet alle Beobachtungstagebuch-Einträge auf, neueste zuerst wenn möglich.",
+      "id": "tool_list_beobachtungen",
+      "name": "beobachtungen_auflisten",
+      "steps": [
+        {
+          "entity": "ent_beobachtung",
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "ObservationCard"
+      }
+    },
+    {
+      "description": "Listet alle Beobachtungen, die zu einem bestimmten Sprung gehören.",
+      "id": "tool_list_sprung_beobachtungen",
+      "name": "sprung_beobachtungen_auflisten",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_beobachtung",
+          "filter": {
+            "sprung": "$params.sprung"
+          },
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "ObservationCard"
+      }
+    },
+    {
+      "description": "Startet die Sturmphase (3C: quengelig, klammernd, weinerlich) eines Sprungs: setzt den Sprung-Status und legt in einem Schritt eine passende Beobachtung im Tagebuch an.",
+      "id": "tool_sturmphase_starten",
+      "name": "sturmphase_starten",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "p_datum",
+          "name": "datum",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "id": "p_notiz",
+          "name": "notiz",
+          "type": "text"
+        },
+        {
+          "default": "quengelig",
+          "id": "p_stimmung",
+          "name": "stimmung",
+          "type": "enum",
+          "values": [
+            "sonnig",
+            "neutral",
+            "quengelig",
+            "klammernd",
+            "weinerlich"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "update",
+          "rowId": "$params.sprung",
+          "set": {
+            "status": "sturmphase"
+          }
+        },
+        {
+          "entity": "ent_beobachtung",
+          "op": "create",
+          "set": {
+            "datum": "$params.datum",
+            "notiz": "$params.notiz",
+            "sprung": "$params.sprung",
+            "stimmung": "$params.stimmung"
+          }
+        }
+      ],
+      "ui": {
+        "component": "ObservationCard"
+      }
+    },
+    {
+      "description": "Schließt einen Sprung feierlich ab: setzt den Status auf 'abgeschlossen' und legt in einem Schritt eine fröhliche Abschluss-Beobachtung im Tagebuch an.",
+      "id": "tool_sprung_abschliessen",
+      "name": "sprung_abschliessen",
+      "params": [
+        {
+          "id": "p_sprung",
+          "name": "sprung",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "p_datum",
+          "name": "datum",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "default": "Sprung geschafft! 🎉",
+          "id": "p_notiz",
+          "name": "notiz",
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "update",
+          "rowId": "$params.sprung",
+          "set": {
+            "status": "abgeschlossen"
+          }
+        },
+        {
+          "entity": "ent_beobachtung",
+          "op": "create",
+          "set": {
+            "datum": "$params.datum",
+            "notiz": "$params.notiz",
+            "sprung": "$params.sprung",
+            "stimmung": "sonnig"
+          }
+        }
+      ],
+      "ui": {
+        "component": "ObservationCard"
+      }
+    }
+  ]
+}

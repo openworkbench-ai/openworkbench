@@ -11,6 +11,7 @@
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1000000,
+          "maxTokens": 128000,
           "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 }
         },
         {
@@ -19,6 +20,7 @@
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1000000,
+          "maxTokens": 128000,
           "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 }
         },
         {
@@ -27,6 +29,7 @@
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1050000,
+          "maxTokens": 128000,
           "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 }
         },
         {
@@ -35,6 +38,7 @@
           "tier": "cheap",
           "reasoning": false,
           "contextWindow": 1050000,
+          "maxTokens": 128000,
           "cost": { "input": 0.2, "output": 1.2, "cacheRead": 0.02, "cacheWrite": 0.25 }
         },
         {
@@ -43,6 +47,7 @@
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1310720,
+          "maxTokens": 131072,
           "cost": { "input": 1.188, "output": 4.18, "cacheRead": 0.247, "cacheWrite": 0 }
         },
         {
@@ -51,6 +56,7 @@
           "tier": "cheap",
           "reasoning": false,
           "contextWindow": 1310720,
+          "maxTokens": 131072,
           "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 }
         },
         {
@@ -59,6 +65,7 @@
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1000000,
+          "maxTokens": 131072,
           "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
         },
         {
@@ -67,6 +74,7 @@
           "tier": "cheap",
           "reasoning": true,
           "contextWindow": 1048576,
+          "maxTokens": 65536,
           "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.19, "cacheWrite": 0 }
         },
         {
@@ -75,6 +83,7 @@
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 500000,
+          "maxTokens": 64000,
           "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 }
         },
         {
@@ -83,6 +92,7 @@
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1048576,
+          "maxTokens": 131072,
           "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 }
         },
         {
@@ -91,6 +101,7 @@
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1048576,
+          "maxTokens": 131072,
           "cost": { "input": 0.66, "output": 1.98, "cacheRead": 0, "cacheWrite": 0 }
         }
       ]

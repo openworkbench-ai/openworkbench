@@ -1,6 +1,7 @@
 export type AgentStreamEvent =
   | { type: "text"; delta: string }
   | { type: "thinking"; delta: string }
+  | { type: "error"; reason: string }
   | { type: "tool_start"; toolCallId: string; toolName: string; args: unknown }
   | {
       type: "tool_end";
@@ -50,6 +51,8 @@ export interface AgentBackend {
   getModelId(): string;
   /** Releases any resources this backend owns (e.g. a scratch workspace directory). Optional — most backends need none. */
   dispose?(): Promise<void>;
+  /** Cancels the in-flight `prompt()` call (e.g. because the client disconnected), unblocking any pending human-in-the-loop tool call too. Optional — falls back to leaving the call to finish on its own. */
+  abort?(): Promise<void>;
   /**
    * Resolves a pending human-in-the-loop tool call (e.g. a build agent's
    * `ask_questions`) with the caller's answer, letting that tool's

@@ -356,17 +356,27 @@ async function main() {
           "Access-Control-Allow-Origin": "*",
         });
 
+        // A dropped connection (reload, navigation, tab close) never calls
+        // stop()/clearChat() -- without this, backend.prompt() keeps running
+        // unattended and `streaming` never resets, wedging every later message
+        // behind a 409 forever (see build-chat below for the same bug).
+        const onClientGone = () => {
+          if (!res.writableEnded) backend.abort?.().catch(() => {});
+        };
+        res.on("close", onClientGone);
+
         try {
           await backend.prompt(message, (event) => {
-            res.write(`data: ${JSON.stringify(event)}\n\n`);
+            if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
           });
-          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
-          res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
         } finally {
+          res.off("close", onClientGone);
           streaming = false;
-          res.end();
+          if (!res.writableEnded) res.end();
         }
         return;
       }
@@ -390,17 +400,27 @@ async function main() {
           "Access-Control-Allow-Origin": "*",
         });
 
+        // Same fix as /api/chat above -- and doubly necessary here, since a
+        // pending ask_questions call blocks this same prompt() call, so a
+        // dropped connection before the user answers would otherwise wedge
+        // buildStreaming forever with no way to recover short of a restart.
+        const onClientGone = () => {
+          if (!res.writableEnded) buildBackend.abort?.().catch(() => {});
+        };
+        res.on("close", onClientGone);
+
         try {
           await buildBackend.prompt(message, (event) => {
-            res.write(`data: ${JSON.stringify(event)}\n\n`);
+            if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
           });
-          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
-          res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
         } finally {
+          res.off("close", onClientGone);
           buildStreaming = false;
-          res.end();
+          if (!res.writableEnded) res.end();
         }
         return;
       }

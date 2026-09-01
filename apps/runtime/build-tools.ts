@@ -283,7 +283,7 @@ export function createBuildTools(
         { minItems: 1 }
       ),
     }),
-    async execute(toolCallId, params) {
+    async execute(toolCallId, params, signal) {
       // The declared schema is only a hint to the model -- nothing here re-validates a tool call's args
       // against it at runtime, so a smaller/faster model can still send malformed options (e.g.
       // `{id, name, description}` objects instead of plain strings) or skip `options` on a choice
@@ -305,8 +305,16 @@ export function createBuildTools(
         }
       }
 
-      const answers = await new Promise<AnsweredQuestion[]>((resolve) => {
+      const answers = await new Promise<AnsweredQuestion[]>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new Error("ask_questions: aborted before the user answered."));
+          return;
+        }
         pendingAnswers.set(toolCallId, resolve);
+        signal?.addEventListener("abort", () => {
+          pendingAnswers.delete(toolCallId);
+          reject(new Error("ask_questions: aborted before the user answered."));
+        });
       });
       const byId = new Map(params.questions.map((q) => [q.id, q.question]));
       const lines = answers.map((a) => {

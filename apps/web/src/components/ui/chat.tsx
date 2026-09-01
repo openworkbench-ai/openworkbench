@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Check, Copy, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react"
 
@@ -24,6 +24,21 @@ function Conversation({ className, stickToBottom = false, onScroll, ...props }: 
     const el = ref.current
     if (!el || !stickToBottom || !pinned.current) return
     el.scrollTop = el.scrollHeight
+  })
+
+  // A message's own content can grow after this render commits -- e.g. an
+  // MCP app widget's iframe resizing itself once it reports its real size --
+  // without the transcript itself re-rendering to re-run the effect above.
+  // Watch the transcript's direct children so a pinned reader still gets
+  // carried down when that happens.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !stickToBottom) return
+    const observer = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight
+    })
+    for (const child of el.children) observer.observe(child)
+    return () => observer.disconnect()
   })
 
   return (

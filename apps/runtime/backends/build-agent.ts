@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,54 +16,10 @@ import { createBuildTools, readAppBundle, saveAndInstall } from "../build-tools.
 const MODEL_PROVIDER = "openrouter";
 export const DEFAULT_MODEL_ID = "z-ai/glm-5.3-flash";
 
-const SKILLS_DIR = new URL("../skills", import.meta.url).pathname;
-
-const AGENTS_MD = `# Build agent
-
-You draft new Open Workbench apps in this directory using your normal file
-tools (read/write/edit/ls/grep/find). This is a scratch workspace, not the
-live catalog -- nothing here is served until the user installs it.
-
-Consult the \`build-app\` skill for the manifest format, file layout, and
-workflow before drafting anything. In short:
-
-1. ALWAYS call \`ask_questions\` exactly once before writing any files --
-   even if the request seems fully specified. Every app has open decisions
-   (which fields matter most, what's required vs optional, what a sensible
-   default is) and the user gets exactly one easy chance to steer before you
-   commit to a design, so use it. Never skip this step.
-2. Call \`update_plan\` with your steps and keep it current -- resend the
-   full list with updated statuses -- as you work through them.
-3. Draft \`<id>/manifest.json\` (and optionally \`<id>/skills/\`,
-   \`<id>/data/\`).
-4. For every entity that should have a real visual presence in chat (not
-   just internal bookkeeping data), write \`<id>/ui/components/<Name>.tsx\`
-   -- a React component in the app's own look and feel, built from
-   \`@openworkbench/app-ui-kit\`'s primitives (Card, Badge, Stat, Heading,
-   Muted, Table) plus your own Tailwind classes, themed via the
-   \`--app-accent\` CSS variable the kit seeds from the app's own
-   \`manifest.json\` \`app.color\`. It receives that entity's row as props --
-   import the generated types from \`../generated/entities.d.ts\` (written
-   automatically the first time you call \`validate_app\`) rather than
-   guessing field names. Then set that tool's \`"ui": { "component": "<Name>" }\`
-   in manifest.json (any tool returning/creating that entity can share the
-   same component). Skip this for tools whose result doesn't need a visual
-   presence -- \`ui\` is optional per tool.
-5. Call \`validate_app\` until it reports no errors -- this also
-   type-checks every \`ui/components/*.tsx\` file and will tell you exactly
-   what's wrong if a component doesn't compile.
-6. Call \`present_app\` to hand the finished, validated draft to the user as
-   a review card. This does NOT install it -- installing is the user's own
-   action, from a button on that card. Your job ends once you've presented
-   a valid draft; if the user then asks for changes, edit the files,
-   re-validate, and call \`present_app\` again to refresh the card.
-
-Never call \`present_app\` before \`validate_app\` reports the manifest is
-valid, and never try to install or activate anything yourself -- there is
-no tool for that here on purpose. Do not run shell commands -- you have no
-\`bash\` tool here, only file tools and the four custom tools
-(ask_questions, update_plan, validate_app, present_app).
-`;
+const SYSTEM_PROMPT = readFileSync(
+  new URL("../prompts/build-agent.md", import.meta.url),
+  "utf-8"
+);
 
 /**
  * Builds the app-authoring agent backend: a Pi coding-agent session scoped
@@ -86,7 +42,6 @@ export async function createBuildAgentBackend(
   }
 
   const workspaceRoot = mkdtempSync(join(tmpdir(), "owb-build-"));
-  writeFileSync(join(workspaceRoot, "AGENTS.md"), AGENTS_MD);
   // A symlink, not a per-session `npm install`: any <id>/ui/components/*.tsx
   // the agent writes imports "@openworkbench/app-ui-kit" as a bare
   // specifier, resolved by Node/Vite/tsc walking up from the component's own
@@ -105,7 +60,9 @@ export async function createBuildAgentBackend(
     cwd: workspaceRoot,
     agentDir,
     settingsManager: SettingsManager.create(workspaceRoot, agentDir),
-    additionalSkillPaths: [SKILLS_DIR],
+    // Full replace, not append -- see apps/runtime/prompts/build-agent.md.
+    systemPromptOverride: () => SYSTEM_PROMPT,
+    appendSystemPromptOverride: () => [],
   });
   await resourceLoader.reload();
 
@@ -145,6 +102,11 @@ export async function createBuildAgentBackend(
             isError: event.isError,
             ...extractUiResource(event.result),
           });
+        } else if (event.type === "compaction_end" && !event.willRetry && event.errorMessage) {
+          // The SDK's one automatic compact-and-retry attempt (for a response
+          // truncated at the model's maxTokens) failed -- surface it instead
+          // of letting the stream end with no assistant text.
+          onEvent({ type: "error", reason: event.errorMessage });
         }
       });
       try {
@@ -189,6 +151,9 @@ export async function createBuildAgentBackend(
     },
     async dispose() {
       rmSync(workspaceRoot, { recursive: true, force: true });
+    },
+    async abort() {
+      await session.abort();
     },
   };
 }

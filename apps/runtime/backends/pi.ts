@@ -64,6 +64,11 @@ export async function createPiAgentBackend(
             isError: event.isError,
             ...extractUiResource(event.result),
           });
+        } else if (event.type === "compaction_end" && !event.willRetry && event.errorMessage) {
+          // The SDK's one automatic compact-and-retry attempt (for a response
+          // truncated at the model's maxTokens) failed -- surface it instead
+          // of letting the stream end with no assistant text.
+          onEvent({ type: "error", reason: event.errorMessage });
         }
       });
       try {
@@ -82,6 +87,9 @@ export async function createPiAgentBackend(
     },
     getModelId() {
       return modelId;
+    },
+    async abort() {
+      await session.abort();
     },
   };
 }

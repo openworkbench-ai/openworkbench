@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { Sparkles } from "lucide-react"
+import { Sparkles, Trash2 } from "lucide-react"
 
 import { fetchApps, fetchModels, streamChat, switchModel, type AgentStreamEvent, type AppInfo, type ModelInfo } from "@/lib/api"
 import { usePersistedState } from "@/lib/persisted-state"
 import { PageHeader } from "@/components/shell/page-header"
+import { Button } from "@/components/ui/button"
 import {
   Conversation,
   Message,
@@ -289,9 +290,27 @@ function AgentPage() {
 
   const stop = () => abortRef.current?.abort()
 
+  /** Drops the transcript from React state and its sessionStorage mirror -- nothing to undo. */
+  const clearChat = () => {
+    abortRef.current?.abort()
+    setStreaming(false)
+    setTurns([])
+  }
+
   return (
     <>
       <PageHeader breadcrumb="AGENT · CHAT">
+        <Button
+          variant="ghost"
+          size="sm"
+          pill
+          className="h-8 gap-1.5 border border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase text-muted-foreground hover:text-foreground"
+          disabled={turns.length === 0}
+          onClick={clearChat}
+        >
+          <Trash2 className="size-3" />
+          Clear chat
+        </Button>
         <Select
           value={currentModel}
           onValueChange={(value) => {

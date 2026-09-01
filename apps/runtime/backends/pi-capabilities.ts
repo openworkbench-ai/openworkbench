@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   DefaultResourceLoader,
   getAgentDir,
@@ -12,6 +13,11 @@ export interface CapabilityProvider {
   resourceLoader: ResourceLoader;
   tools: ToolDefinition[];
 }
+
+const SYSTEM_PROMPT = readFileSync(
+  new URL("../prompts/normal-agent.md", import.meta.url),
+  "utf-8"
+);
 
 /**
  * Assembles everything an agent backend needs to act on installed apps'
@@ -30,6 +36,9 @@ export async function createCapabilityProvider(
     agentDir,
     settingsManager: SettingsManager.create(cwd, agentDir),
     additionalSkillPaths: capabilities.skillPaths,
+    // Full replace, not append -- see apps/runtime/prompts/normal-agent.md.
+    systemPromptOverride: () => SYSTEM_PROMPT,
+    appendSystemPromptOverride: () => [],
   });
   await resourceLoader.reload();
 

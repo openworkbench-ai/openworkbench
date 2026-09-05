@@ -1,0 +1,230 @@
+[
+  {
+    "sprung": "$sprung.s1",
+    "beschreibung": "Schaut konzentriert und länger in Gesichter"
+  },
+  {
+    "sprung": "$sprung.s1",
+    "beschreibung": "Verfolgt ein langsam bewegtes Objekt mit den Augen"
+  },
+  {
+    "sprung": "$sprung.s1",
+    "beschreibung": "Lauscht aufmerksam auf Stimmen und Geräusche"
+  },
+  {
+    "sprung": "$sprung.s1",
+    "beschreibung": "Reagiert deutlicher auf Gerüche und Geschmack"
+  },
+  {
+    "sprung": "$sprung.s1",
+    "beschreibung": "Zeigt mehr Mimik – vielleicht das erste bewusste Lächeln"
+  },
+  {
+    "sprung": "$sprung.s2",
+    "beschreibung": "Beobachtet die eigenen Hände und Finger fasziniert"
+  },
+  {
+    "sprung": "$sprung.s2",
+    "beschreibung": "Starrt gespannt auf Muster, Streifen oder Kontraste"
+  },
+  {
+    "sprung": "$sprung.s2",
+    "beschreibung": "Verfolgt Gegenstände abwechselnd mit den Augen (hin und her)"
+  },
+  {
+    "sprung": "$sprung.s2",
+    "beschreibung": "Strampelt und wedelt – entdeckt den eigenen Körper"
+  },
+  {
+    "sprung": "$sprung.s2",
+    "beschreibung": "Brabbelt neue Laute und gurgt mit Melodie"
+  },
+  {
+    "sprung": "$sprung.s3",
+    "beschreibung": "Verfolgt eine fließende Bewegung von Anfang bis Ende (z. B. rollender Ball)"
+  },
+  {
+    "sprung": "$sprung.s3",
+    "beschreibung": "Bewegt sich geschmeidiger: hebt den Kopf höher, dreht sich flüssiger"
+  },
+  {
+    "sprung": "$sprung.s3",
+    "beschreibung": "Macht erste Rollversuche (z. B. vom Bauch auf den Rücken)"
+  },
+  {
+    "sprung": "$sprung.s3",
+    "beschreibung": "Greift gezielter nach Gegenständen"
+  },
+  {
+    "sprung": "$sprung.s3",
+    "beschreibung": "Brabbelt fließende Lautketten wie eine kleine Sprache"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Greift gezielt und bringt Gegenstände zum Mund"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Freut sich auf bekannte Ereignisse (z. B. zappelt bei der Flasche)"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Reagiert auf den eigenen Namen"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Lacht schallend und zeigt deutliche Überraschung"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Untersucht Dinge: schüttelt, klopft, dreht sie um"
+  },
+  {
+    "sprung": "$sprung.s4",
+    "beschreibung": "Berührt Details, z. B. Muster auf der Kleidung"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Hebt die Arme, um hochgehoben zu werden – versteht Abstand"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Schaut nach, wohin eine Person oder ein Ding verschwunden ist"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Wirft Dinge weg und schaut zu, wo sie landen"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Entdeckt sich selbst im Spiegel"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Unterscheidet vertraute und fremde Menschen deutlicher"
+  },
+  {
+    "sprung": "$sprung.s5",
+    "beschreibung": "Betrachtet Bilder in Büchern ganz genau"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Erkennt Dinge gleicher Art wieder (z. B. alle Hunde sind ‚Hund')"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Verknüpft Laute mit Bedeutung – erste zugeordnete ‚Mama'/'Papa'"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Versteht einfache Wörter, auch wenn das Ding nicht da ist"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Imitiert Gesten wie Winken oder Klatschen"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Robbt oder krabbelt gezielt auf einen Gegenstand zu"
+  },
+  {
+    "sprung": "$sprung.s6",
+    "beschreibung": "Zieht sich an Möbeln hoch"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Versteht kurze Abfolgen (‚Waschen, dann Essen')"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Baut Türme und schiebt Dinge ineinander"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Zeigt auf Dinge, wenn man sie benennt"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Zeigt mit dem Finger, um auf etwas aufmerksam zu machen"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Versteht ‚Nein' (zumindest für den Moment)"
+  },
+  {
+    "sprung": "$sprung.s7",
+    "beschreibung": "Macht erste Gehversuche entlang an Möbeln"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Führt kleine Programme selbst aus (z. B. mitwaschen, ausziehen)"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Kombiniert Gegenstände mit Sinn (Löffel in den Topf)"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Fängt ein rollendes Spielzeug vorhersehbar auf"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Spielt Als-ob: tut so, als würde aus dem Becher getrunken"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Beantwortet einfache Fragen mit Nicken oder Kopfschütteln"
+  },
+  {
+    "sprung": "$sprung.s8",
+    "beschreibung": "Macht erste freie Schritte (bei manchen Kindern)"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Probiert Grenzen aus und testet Regeln"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Benutzt mehr Wörter mit Bedeutung, liebt kleine Reime"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Spielt erste Rollenspiele (Telefonieren, Puppe füttern)"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Isst selbst mit Löffel oder Gabel (noch viel daneben)"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Baut höhere Türme, steckt Formen in die passende Öffnung"
+  },
+  {
+    "sprung": "$sprung.s9",
+    "beschreibung": "Zeigt Trotz und Eigenwilligkeit (‚Ich will das selbst!')"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Versteht Besitz: ‚ich', ‚mein', ‚dein'"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Bildet Zweiwort-Sätze (‚Mama kommen', ‚Auto fährt')"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Zeigt Mitgefühl und tröstet andere"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Sortiert gezielt nach Farbe oder Form"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Versteht den Tagesablauf und plant einfache Dinge"
+  },
+  {
+    "sprung": "$sprung.s10",
+    "beschreibung": "Benutzt Werkzeuge richtig (Kamm, Stift, Löffel)"
+  }
+]

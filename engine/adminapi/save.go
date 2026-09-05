@@ -41,9 +41,14 @@ type saveDataFile struct {
 // saveUIComponent is one tool's built MCP Apps resource: the self-contained
 // HTML/JS bundle Vite produced from ui/components/<Name>.tsx (see
 // packages/app-ui-kit). Name must match a tool's manifest.json ui.component.
+// TSX is that same component's original React source -- optional (an older
+// caller might send HTML alone), but the build agent always includes it so
+// the catalog keeps the authored source next to the compiled bundle instead
+// of only the latter.
 type saveUIComponent struct {
 	Name string `json:"name"`
 	HTML string `json:"html"`
+	TSX  string `json:"tsx,omitempty"`
 }
 
 type saveRequest struct {
@@ -142,8 +147,9 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeAppBundle stages manifest.json, one skills/<name>/SKILL.md per skill,
-// one data/<entity>.json per data entry, and one ui/<name>.html per built MCP
-// Apps component in a fresh temp directory inside catalogDir (so the final
+// one data/<entity>.json per data entry, and one ui/<name>.html (plus, when
+// submitted, its ui/components/<name>.tsx source) per built MCP Apps
+// component in a fresh temp directory inside catalogDir (so the final
 // swap is a same-filesystem rename), then swaps it in for catalogDir/<id>.
 // Any previous contents are moved aside rather than deleted until the swap is
 // confirmed, so a failure partway through leaves the previous app dir intact
@@ -200,9 +206,22 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 		if err := os.Mkdir(uiDir, 0o755); err != nil {
 			return fmt.Errorf("create ui dir: %w", err)
 		}
+		var componentsDir string
 		for _, ui := range req.UI {
 			if err := os.WriteFile(filepath.Join(uiDir, ui.Name+".html"), []byte(ui.HTML), 0o644); err != nil {
 				return fmt.Errorf("write ui component %q: %w", ui.Name, err)
+			}
+			if ui.TSX == "" {
+				continue
+			}
+			if componentsDir == "" {
+				componentsDir = filepath.Join(uiDir, "components")
+				if err := os.Mkdir(componentsDir, 0o755); err != nil {
+					return fmt.Errorf("create ui/components dir: %w", err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(componentsDir, ui.Name+".tsx"), []byte(ui.TSX), 0o644); err != nil {
+				return fmt.Errorf("write ui component source %q: %w", ui.Name, err)
 			}
 		}
 	}

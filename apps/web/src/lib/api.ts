@@ -21,6 +21,8 @@ export interface ToolInfo {
   name: string
   description?: string
   params?: ToolParam[]
+  /** Set when this tool's result renders via ui/components/<component>.tsx. */
+  ui?: { component: string }
 }
 
 export interface SkillInfo {
@@ -250,6 +252,21 @@ export async function answerBuildQuestions(
   )
 }
 
+/** Same as {@link fetchModels}/{@link switchModel}, against the build agent's own session. */
+export async function fetchBuildModels(): Promise<{ models: ModelInfo[]; current: string }> {
+  return asJson(await fetch(`${BASE}/build-chat/models`))
+}
+
+export async function switchBuildModel(modelId: string): Promise<{ current: string }> {
+  return asJson(
+    await fetch(`${BASE}/build-chat/model`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId }),
+    }),
+  )
+}
+
 /** A build agent's in-progress draft — read straight off its scratch workspace for the review card. */
 export interface AppDraft {
   id: string
@@ -258,6 +275,7 @@ export interface AppDraft {
   tools: ToolInfo[]
   skills: string[]
   data: { entity: string; count: number }[]
+  ui: string[]
 }
 
 /** Fetches the draft `present_app` handed to the user for review, by app id. */

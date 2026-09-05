@@ -82,7 +82,9 @@ func buildServer(reg *registry.Registry, ra *registry.RegisteredApp) *mcp.Server
 	}, nil)
 
 	uiComponents := map[string]bool{}
+	declaredNames := map[string]bool{}
 	for _, tool := range ra.Schema.Tools {
+		declaredNames[tool.Name] = true
 		t := &mcp.Tool{
 			Name:        tool.Name,
 			Description: tool.Description,
@@ -94,6 +96,11 @@ func buildServer(reg *registry.Registry, ra *registry.RegisteredApp) *mcp.Server
 		}
 		s.AddTool(t, toolHandler(reg, ra.Schema.ID, tool.ID))
 	}
+
+	// Every declared tool is registered first, so registerGenericCrudTools
+	// can see the full set of names already claimed and skip any entity/op
+	// a hand-authored tool already covers under that name.
+	registerGenericCrudTools(s, reg, ra, declaredNames)
 
 	// One resource per distinct component, not per tool: several tools (e.g.
 	// create_workout and get_workout) can share the same rendered component.
@@ -141,11 +148,9 @@ func uiResourceHandler(appDir, component string) mcp.ResourceHandler {
 // explain rather than a transport fault.
 func toolHandler(reg *registry.Registry, appID, toolID string) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var params map[string]json.RawMessage
-		if len(req.Params.Arguments) > 0 {
-			if err := json.Unmarshal(req.Params.Arguments, &params); err != nil {
-				return errorResult("arguments must be a JSON object"), nil
-			}
+		params, errRes := decodeToolArgs(req.Params.Arguments)
+		if errRes != nil {
+			return errRes, nil
 		}
 
 		result, operr := tools.Execute(ctx, reg, appID, toolID, params)
@@ -153,16 +158,37 @@ func toolHandler(reg *registry.Registry, appID, toolID string) mcp.ToolHandler {
 			return errorResult(opErrMessage(operr)), nil
 		}
 
-		content := toolResultContent(result)
-		payload, err := json.Marshal(content)
-		if err != nil {
-			return errorResult("could not encode result: " + err.Error()), nil
-		}
-		return &mcp.CallToolResult{
-			Content:           []mcp.Content{&mcp.TextContent{Text: string(payload)}},
-			StructuredContent: content,
-		}, nil
+		return marshalToolResult(toolResultContent(result))
 	}
+}
+
+// decodeToolArgs decodes a call's raw JSON arguments into the per-field map
+// every domain/tools function expects, or a ready-to-return tool error if
+// the arguments aren't a JSON object. Used by both toolHandler (declared
+// tools) and the generic per-entity CRUD tools in generic_tools.go.
+func decodeToolArgs(raw json.RawMessage) (map[string]json.RawMessage, *mcp.CallToolResult) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var params map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return nil, errorResult("arguments must be a JSON object")
+	}
+	return params, nil
+}
+
+// marshalToolResult renders a successful call's result (a row, a list page,
+// a named-steps map, ...) as both the plain-text and structured content of
+// an MCP tool result.
+func marshalToolResult(content any) (*mcp.CallToolResult, error) {
+	payload, err := json.Marshal(content)
+	if err != nil {
+		return errorResult("could not encode result: " + err.Error()), nil
+	}
+	return &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: string(payload)}},
+		StructuredContent: content,
+	}, nil
 }
 
 // toolResultContent chooses what a tool call reports back: if the tool

@@ -85,6 +85,8 @@ export function readAppBundle(workspaceRoot: string, id: string): AppBundle | { 
 export interface AppUIComponent {
   name: string;
   html: string;
+  /** The original ui/components/<name>.tsx source, so the engine can persist it in the catalog alongside the compiled bundle. */
+  tsx: string;
 }
 
 /**
@@ -157,7 +159,13 @@ export async function buildAppUi(
 
   try {
     const built = await buildAppUI({ appDir, accentColor: manifest.app?.color });
-    return { components: built.map((b) => ({ name: b.component, html: b.html })) };
+    return {
+      components: built.map((b) => ({
+        name: b.component,
+        html: b.html,
+        tsx: readFileSync(join(appDir, "ui", "components", `${b.component}.tsx`), "utf-8"),
+      })),
+    };
   } catch (err) {
     return { error: `ui/components failed to build: ${(err as Error).message}` };
   }

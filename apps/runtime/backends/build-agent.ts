@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,10 @@ const SYSTEM_PROMPT = readFileSync(
  * present_app) for talking to the user and the engine. Structurally
  * parallel to createPiAgentBackend, but deliberately does not share its
  * capabilities (installed apps' skills/MCP tools) -- this agent's job is
- * to produce a new app, not use existing ones.
+ * to produce a new app, not use existing ones. It does load its own set of
+ * Open Workbench platform-knowledge skills (apps/runtime/prompts/skills/)
+ * on demand, alongside the compact behavioral SYSTEM_PROMPT below -- see
+ * that file for why the split exists.
  */
 export async function createBuildAgentBackend(
   engineUrl: string,
@@ -60,6 +63,10 @@ export async function createBuildAgentBackend(
     cwd: workspaceRoot,
     agentDir,
     settingsManager: SettingsManager.create(workspaceRoot, agentDir),
+    // Modular Open Workbench platform knowledge (app-design, manifest,
+    // tools, ui, seed-data, app-skills) -- see apps/runtime/prompts/skills/
+    // -- loaded on-demand rather than baked into SYSTEM_PROMPT below.
+    additionalSkillPaths: [fileURLToPath(new URL("../prompts/skills", import.meta.url))],
     // Full replace, not append -- see apps/runtime/prompts/build-agent.md.
     systemPromptOverride: () => SYSTEM_PROMPT,
     appendSystemPromptOverride: () => [],
@@ -121,6 +128,12 @@ export async function createBuildAgentBackend(
         throw new Error(`Unknown model "${nextModelId}" for provider "${MODEL_PROVIDER}".`);
       }
       await session.setModel(nextModel);
+      // setModel carries the current thinking level forward; a non-reasoning
+      // model forces it to "off", which then silently disables reasoning on
+      // the model being switched to unless we bump it back up here.
+      if (nextModel.reasoning && session.thinkingLevel === "off") {
+        session.setThinkingLevel("medium");
+      }
       modelId = nextModelId;
     },
     getModelId() {
@@ -137,6 +150,12 @@ export async function createBuildAgentBackend(
         return null;
       }
       if (!manifest.app) return null;
+      const componentsDir = join(workspaceRoot, id, "ui", "components");
+      const ui = existsSync(componentsDir)
+        ? readdirSync(componentsDir)
+            .filter((f) => f.endsWith(".tsx"))
+            .map((f) => f.slice(0, -".tsx".length))
+        : [];
       return {
         id,
         app: manifest.app,
@@ -144,6 +163,7 @@ export async function createBuildAgentBackend(
         tools: manifest.tools ?? [],
         skills: bundle.skills.map((s) => s.name),
         data: bundle.data.map((d) => ({ entity: d.entity, count: d.rows.length })),
+        ui,
       };
     },
     installDraft(id) {

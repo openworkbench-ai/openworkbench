@@ -1,0 +1,316 @@
+{
+  "app": {
+    "color": "#c9557d",
+    "description": "Entwicklungstagebuch nach dem Buch „Oje, ich wachse!“ (Frans X. Plooij \u0026 Hetty van de Rijt): die 10 mentalen Sprünge mit Wochenfenstern, Fähigkeiten-Checklisten zum Abhaken und ein Tagebuch für die stürmischen Wochen.",
+    "emoji": "🌱",
+    "id": "oje_ich_wachse",
+    "name": "Oje, ich wachse! – Sprung-Tracker",
+    "version": 1
+  },
+  "entities": [
+    {
+      "fields": [
+        {
+          "id": "fld_kind_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_kind_geburtsdatum",
+          "name": "geburtsdatum",
+          "required": true,
+          "type": "datetime"
+        }
+      ],
+      "id": "ent_kind",
+      "name": "kind"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_sprung_nummer",
+          "max": 10,
+          "min": 1,
+          "name": "nummer",
+          "required": true,
+          "type": "integer",
+          "unique": true
+        },
+        {
+          "id": "fld_sprung_titel",
+          "name": "titel",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_thema",
+          "name": "thema",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_sprung_start_woche",
+          "name": "start_woche",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "fld_sprung_ende_woche",
+          "name": "ende_woche",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "id": "ent_sprung",
+      "name": "sprung"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_faehigkeit_sprung",
+          "name": "sprung",
+          "onDelete": "restrict",
+          "required": true,
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "fld_faehigkeit_beschreibung",
+          "name": "beschreibung",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_faehigkeit_beobachtet_am",
+          "name": "beobachtet_am",
+          "type": "datetime"
+        },
+        {
+          "id": "fld_faehigkeit_notiz",
+          "name": "notiz",
+          "type": "text"
+        }
+      ],
+      "id": "ent_faehigkeit",
+      "name": "faehigkeit"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_eintrag_kind",
+          "name": "kind",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_kind",
+          "type": "reference"
+        },
+        {
+          "id": "fld_eintrag_sprung",
+          "name": "sprung",
+          "onDelete": "set_null",
+          "target": "ent_sprung",
+          "type": "reference"
+        },
+        {
+          "id": "fld_eintrag_datum",
+          "name": "datum",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "default": "neutral",
+          "id": "fld_eintrag_stimmung",
+          "name": "stimmung",
+          "type": "enum",
+          "values": [
+            "stürmisch",
+            "neutral",
+            "ruhig"
+          ]
+        },
+        {
+          "id": "fld_eintrag_text",
+          "name": "text",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "id": "ent_eintrag",
+      "name": "eintrag"
+    }
+  ],
+  "tools": [
+    {
+      "description": "Lege ein Kind an (z. B. ein Geschwisterkind). Aria (geb. 11.06.2026) ist bereits angelegt.",
+      "id": "tool_kind_anlegen",
+      "name": "kind_anlegen",
+      "params": [
+        {
+          "id": "p_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_geburtsdatum",
+          "name": "geburtsdatum",
+          "required": true,
+          "type": "datetime"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_kind",
+          "op": "create",
+          "set": {
+            "geburtsdatum": "$params.geburtsdatum",
+            "name": "$params.name"
+          }
+        }
+      ]
+    },
+    {
+      "description": "Hake eine Fähigkeit aus der Checkliste als beobachtet ab. Optional mit Notiz (überschreibt eine vorhandene Notiz).",
+      "id": "tool_faehigkeit_beobachten",
+      "name": "faehigkeit_beobachten",
+      "params": [
+        {
+          "id": "p_faehigkeit_id",
+          "name": "faehigkeit_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_beobachtet_am",
+          "name": "beobachtet_am",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "id": "p_notiz",
+          "name": "notiz",
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_faehigkeit",
+          "op": "update",
+          "rowId": "$params.faehigkeit_id",
+          "set": {
+            "beobachtet_am": "$params.beobachtet_am",
+            "notiz": "$params.notiz"
+          }
+        }
+      ]
+    },
+    {
+      "description": "Zeige die Fähigkeiten-Checkliste eines Sprungs (z. B. nach „Welche neuen Fähigkeiten gehören zu Sprung 4?“).",
+      "id": "tool_sprung_checkliste",
+      "name": "sprung_checkliste",
+      "params": [
+        {
+          "id": "p_sprung_id",
+          "name": "sprung_id",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_faehigkeit",
+          "filter": {
+            "sprung": "$params.sprung_id"
+          },
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "Faehigkeit"
+      }
+    },
+    {
+      "description": "Zeige alle 10 mentalen Sprünge mit Themen und ca. Wochenfenstern ab Geburt.",
+      "id": "tool_spruenge_anzeigen",
+      "name": "spruenge_anzeigen",
+      "steps": [
+        {
+          "entity": "ent_sprung",
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "Sprung"
+      }
+    },
+    {
+      "description": "Schreibe einen Tagebucheintrag – ideal für die stürmischen Wochen vor einem Sprung (Stimmung: stürmisch/neutral/ruhig).",
+      "id": "tool_notiz_hinzufuegen",
+      "name": "notiz_hinzufuegen",
+      "params": [
+        {
+          "id": "p_kind_id",
+          "name": "kind_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_sprung_id",
+          "name": "sprung_id",
+          "type": "text"
+        },
+        {
+          "id": "p_datum",
+          "name": "datum",
+          "required": true,
+          "type": "datetime"
+        },
+        {
+          "default": "neutral",
+          "id": "p_stimmung",
+          "name": "stimmung",
+          "type": "enum",
+          "values": [
+            "stürmisch",
+            "neutral",
+            "ruhig"
+          ]
+        },
+        {
+          "id": "p_text",
+          "name": "text",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_eintrag",
+          "op": "create",
+          "set": {
+            "datum": "$params.datum",
+            "kind": "$params.kind_id",
+            "sprung": "$params.sprung_id",
+            "stimmung": "$params.stimmung",
+            "text": "$params.text"
+          }
+        }
+      ]
+    },
+    {
+      "description": "Zeige alle Tagebucheinträge (Stimmung + Notizen).",
+      "id": "tool_tagebuch_anzeigen",
+      "name": "tagebuch_anzeigen",
+      "steps": [
+        {
+          "entity": "ent_eintrag",
+          "op": "list"
+        }
+      ],
+      "ui": {
+        "component": "TagebuchEintrag"
+      }
+    }
+  ]
+}

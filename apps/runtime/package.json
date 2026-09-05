@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "cd ../.. && tsx --env-file-if-exists=.env apps/runtime/agent.ts",
-    "server": "cd ../.. && tsx --env-file-if-exists=.env apps/runtime/server.ts"
+    "server": "cd ../.. && tsx --env-file-if-exists=.env apps/runtime/server.ts",
+    "test": "cd ../.. && node --import tsx --test apps/runtime/**/*.test.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.0",

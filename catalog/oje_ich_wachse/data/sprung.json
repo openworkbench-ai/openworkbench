@@ -1,0 +1,82 @@
+[
+  {
+    "$key": "s1",
+    "nummer": 1,
+    "titel": "Die Welt der Empfindungen",
+    "thema": "Alles ist neu und wechselnd: Das Baby merkt, dass Empfindungen – Geräusche, Licht, Gerüche, Berührungen – sich verändern statt gleichzubleiben.",
+    "start_woche": 4,
+    "ende_woche": 6
+  },
+  {
+    "$key": "s2",
+    "nummer": 2,
+    "titel": "Die Welt der Muster",
+    "thema": "Das Baby erkennt Muster: Wiederkehrende Formen, Geräusche und eigene Körperempfindungen werden zu einer vertrauten Landschaft.",
+    "start_woche": 7,
+    "ende_woche": 9
+  },
+  {
+    "$key": "s3",
+    "nummer": 3,
+    "titel": "Die Welt der Übergänge",
+    "thema": "Das Baby versteht fließende Übergänge: Bewegungen haben Anfang, Mitte und Ende und gehören zusammen.",
+    "start_woche": 11,
+    "ende_woche": 14
+  },
+  {
+    "$key": "s4",
+    "nummer": 4,
+    "titel": "Die Welt der Ereignisse",
+    "thema": "Das Baby sieht die Welt als Abfolge kurzer Ereignisse: Greifen, Fallenlassen, Wieder-Hochheben – kleine Geschichten mit Folgen.",
+    "start_woche": 17,
+    "ende_woche": 21
+  },
+  {
+    "$key": "s5",
+    "nummer": 5,
+    "titel": "Die Welt der Beziehungen",
+    "thema": "Das Baby entdeckt Beziehungen zwischen Dingen und Menschen: Abstand, Nähe, Wiederfinden und Wiedererkennen.",
+    "start_woche": 24,
+    "ende_woche": 28
+  },
+  {
+    "$key": "s6",
+    "nummer": 6,
+    "titel": "Die Welt der Kategorien",
+    "thema": "Das Baby ordnet die Welt in Gruppen: Hunde, Menschen, Spielzeug – Dinge lassen sich nach ihrer Art unterscheiden und benennen.",
+    "start_woche": 34,
+    "ende_woche": 38
+  },
+  {
+    "$key": "s7",
+    "nummer": 7,
+    "titel": "Die Welt der Zusammenhänge",
+    "thema": "Das Baby versteht Abfolgen und Zusammenhänge: Erst das Bad, dann das Einschlafen – die Welt folgt kleinen Plänen.",
+    "start_woche": 42,
+    "ende_woche": 48
+  },
+  {
+    "$key": "s8",
+    "nummer": 8,
+    "titel": "Die Welt der Programme",
+    "thema": "Das Baby begreift ganze Handlungsprogramme: Anziehen, Essen, Aufräumen bestehen aus Schritten, die man selbst ausführen kann.",
+    "start_woche": 51,
+    "ende_woche": 56
+  },
+  {
+    "$key": "s9",
+    "nummer": 9,
+    "titel": "Die Welt der Prinzipien",
+    "thema": "Das Baby entdeckt Prinzipien und Regeln: Dinge haben einen Sinn und einen Zweck, Grenzen ausprobieren inklusive.",
+    "start_woche": 60,
+    "ende_woche": 66
+  },
+  {
+    "$key": "s10",
+    "nummer": 10,
+    "titel": "Die Welt der Systeme",
+    "thema": "Das Baby sieht Systeme und das große Ganze: Zeit, Besitz, Gefühle und Rollen gehören zu zusammenhängenden Abläufen.",
+    "start_woche": 70,
+    "ende_woche": 76
+  }
+]

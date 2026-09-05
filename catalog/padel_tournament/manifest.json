@@ -1,0 +1,308 @@
+{
+  "app": {
+    "color": "#2f9e44",
+    "description": "Randomly pairs 10 players into teams, runs a round-robin, and seeds semifinals/final from the standings.",
+    "emoji": "🎾",
+    "id": "padel_tournament",
+    "name": "Padel Tournament",
+    "version": 1
+  },
+  "entities": [
+    {
+      "fields": [
+        {
+          "id": "fld_player_name",
+          "name": "name",
+          "required": true,
+          "type": "text",
+          "unique": true
+        }
+      ],
+      "id": "ent_player",
+      "name": "player"
+    },
+    {
+      "fields": [
+        {
+          "default": 3,
+          "id": "fld_settings_sets_per_match",
+          "max": 5,
+          "min": 1,
+          "name": "sets_per_match",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "id": "ent_settings",
+      "name": "settings"
+    },
+    {
+      "fields": [
+        {
+          "id": "fld_team_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "fld_team_player_a",
+          "name": "player_a",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_player",
+          "type": "reference"
+        },
+        {
+          "id": "fld_team_player_b",
+          "name": "player_b",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_player",
+          "type": "reference"
+        }
+      ],
+      "id": "ent_team",
+      "name": "team"
+    },
+    {
+      "fields": [
+        {
+          "default": "round_robin",
+          "id": "fld_match_stage",
+          "name": "stage",
+          "required": true,
+          "type": "enum",
+          "values": [
+            "round_robin",
+            "semifinal",
+            "final"
+          ]
+        },
+        {
+          "id": "fld_match_team_a",
+          "name": "team_a",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_team",
+          "type": "reference"
+        },
+        {
+          "id": "fld_match_team_b",
+          "name": "team_b",
+          "onDelete": "cascade",
+          "required": true,
+          "target": "ent_team",
+          "type": "reference"
+        },
+        {
+          "id": "fld_match_sets_a",
+          "name": "sets_won_a",
+          "type": "integer"
+        },
+        {
+          "id": "fld_match_sets_b",
+          "name": "sets_won_b",
+          "type": "integer"
+        },
+        {
+          "id": "fld_match_winner",
+          "name": "winner",
+          "onDelete": "set_null",
+          "target": "ent_team",
+          "type": "reference"
+        },
+        {
+          "default": false,
+          "id": "fld_match_played",
+          "name": "played",
+          "type": "boolean"
+        }
+      ],
+      "id": "ent_match",
+      "name": "match"
+    }
+  ],
+  "tools": [
+    {
+      "description": "List the tournament settings row (currently just sets_per_match).",
+      "id": "tool_get_settings",
+      "name": "get_settings",
+      "steps": [
+        {
+          "entity": "ent_settings",
+          "op": "list"
+        }
+      ]
+    },
+    {
+      "description": "Configure how many sets are played per match in this tournament. Use get_settings first to find the settings row id.",
+      "id": "tool_set_sets_per_match",
+      "name": "set_sets_per_match",
+      "params": [
+        {
+          "id": "p_settings_id",
+          "name": "settings_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_sets",
+          "name": "sets_per_match",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_settings",
+          "op": "update",
+          "rowId": "$params.settings_id",
+          "set": {
+            "sets_per_match": "$params.sets_per_match"
+          }
+        }
+      ]
+    },
+    {
+      "description": "Record the outcome of a match: sets won by each team and the winning team.",
+      "id": "tool_record_match_result",
+      "name": "record_match_result",
+      "params": [
+        {
+          "id": "p_match_id",
+          "name": "match_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_sets_a",
+          "name": "sets_won_a",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "p_sets_b",
+          "name": "sets_won_b",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "id": "p_winner",
+          "name": "winner_team_id",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_match",
+          "op": "update",
+          "rowId": "$params.match_id",
+          "set": {
+            "played": true,
+            "sets_won_a": "$params.sets_won_a",
+            "sets_won_b": "$params.sets_won_b",
+            "winner": "$params.winner_team_id"
+          }
+        }
+      ],
+      "ui": {
+        "component": "Match"
+      }
+    },
+    {
+      "description": "List all teams in the tournament.",
+      "id": "tool_list_teams",
+      "name": "list_teams",
+      "steps": [
+        {
+          "entity": "ent_team",
+          "op": "list"
+        }
+      ]
+    },
+    {
+      "description": "List all matches, optionally filter by stage using the stage field on returned rows.",
+      "id": "tool_list_matches",
+      "name": "list_matches",
+      "steps": [
+        {
+          "entity": "ent_match",
+          "op": "list"
+        }
+      ]
+    },
+    {
+      "description": "Create a team pairing two players together.",
+      "id": "tool_create_team",
+      "name": "create_team",
+      "params": [
+        {
+          "id": "p_name",
+          "name": "name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_player_a",
+          "name": "player_a_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_player_b",
+          "name": "player_b_id",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_team",
+          "op": "create",
+          "set": {
+            "name": "$params.name",
+            "player_a": "$params.player_a_id",
+            "player_b": "$params.player_b_id"
+          }
+        }
+      ]
+    },
+    {
+      "description": "Schedule a match between two teams for a given stage (round_robin, semifinal, or final).",
+      "id": "tool_schedule_match",
+      "name": "schedule_match",
+      "params": [
+        {
+          "id": "p_stage",
+          "name": "stage",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_team_a",
+          "name": "team_a_id",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "id": "p_team_b",
+          "name": "team_b_id",
+          "required": true,
+          "type": "text"
+        }
+      ],
+      "steps": [
+        {
+          "entity": "ent_match",
+          "op": "create",
+          "set": {
+            "stage": "$params.stage",
+            "team_a": "$params.team_a_id",
+            "team_b": "$params.team_b_id"
+          }
+        }
+      ]
+    }
+  ]
+}

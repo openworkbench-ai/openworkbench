@@ -41,6 +41,8 @@ export interface AppDraft {
   tools: unknown[];
   skills: string[];
   data: { entity: string; count: number }[];
+  /** ui/components/<Name>.tsx names present in the draft — just a listing, not compiled/type-checked here. */
+  ui: string[];
 }
 
 export type InstallResult = { ok: true; message: string } | { ok: false; status: number; message: string };

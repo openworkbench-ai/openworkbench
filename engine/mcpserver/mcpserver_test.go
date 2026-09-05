@@ -125,8 +125,11 @@ func TestListToolsAndCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if len(listed.Tools) != 3 {
-		t.Fatalf("got %d tools, want 3", len(listed.Tools))
+	// 3 declared tools plus generic fallback CRUD tools for every
+	// entity/op the declared tools don't already claim a name for -- see
+	// generic_tools_test.go for the dedicated fallback-tool coverage.
+	if len(listed.Tools) < 3 {
+		t.Fatalf("got %d tools, want at least 3", len(listed.Tools))
 	}
 	names := map[string]bool{}
 	for _, tl := range listed.Tools {

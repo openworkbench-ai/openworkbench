@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Trash2 } from "lucide-react"
+import { Sparkles, Trash2 } from "lucide-react"
 
 import {
   answerBuildQuestions,
   fetchBuildDraft,
+  fetchBuildModels,
   installBuildDraft,
   streamBuildChat,
+  switchBuildModel,
   type AgentStreamEvent,
   type AppDraft,
   type AskQuestion,
+  type ModelInfo,
   type PlanStep,
 } from "@/lib/api"
 import { usePersistedState } from "@/lib/persisted-state"
@@ -36,6 +39,7 @@ import {
   PromptInputToolbar,
 } from "@/components/ui/prompt-input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StreamingCaret } from "@/components/ui/streaming"
 import { TaskItem, TaskList } from "@/components/ui/task-list"
 import { Thinking } from "@/components/ui/thinking"
@@ -175,9 +179,27 @@ function groupSegments(segments: Segment[]): RenderItem[] {
   return items
 }
 
+/**
+ * `read`/`write`/`edit` calls show only the tool name by default — for a
+ * `read` of a `SKILL.md`, that's just "read" with no hint which skill the
+ * agent consulted. Surface the path (and the skill name specifically) in
+ * the label instead of leaving it buried in the collapsed Arguments panel.
+ */
+function toolCallLabel(toolName: string, args: unknown): string {
+  if (!["read", "write", "edit"].includes(toolName) || !args || typeof args !== "object") return toolName
+  const path = (args as Record<string, unknown>).path
+  if (typeof path !== "string") return toolName
+  const segments = path.split("/").filter(Boolean)
+  if (segments[segments.length - 1] === "SKILL.md" && segments.length >= 2) {
+    return `${toolName} skill: ${segments[segments.length - 2]}`
+  }
+  const shortPath = segments.slice(-3).join("/")
+  return `${toolName} ${shortPath}`
+}
+
 function toolGroupLabel(items: ToolSegment[]): string {
-  const names = new Set(items.map((s) => s.toolName))
-  if (names.size === 1) return `${items.length} × ${[...names][0]}`
+  const labels = new Set(items.map((s) => toolCallLabel(s.toolName, s.args)))
+  if (labels.size === 1) return `${items.length} × ${[...labels][0]}`
   return `${items.length} tool calls`
 }
 
@@ -451,6 +473,21 @@ function AppPreviewCard({ appId }: { appId: string }) {
           </div>
         ) : null}
 
+        {draft.ui.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted-foreground">
+              {draft.ui.length} UI component{draft.ui.length === 1 ? "" : "s"}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {draft.ui.map((name) => (
+                <Badge key={name} variant="outline">
+                  {name}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {draft.skills.length > 0 || seedRows > 0 ? (
           <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted-foreground">
             {[
@@ -476,7 +513,18 @@ function BuildPage() {
   const [turns, setTurns] = usePersistedState<Turn[]>("owb.build.turns", [], sealInterruptedTurns)
   const [draft, setDraft] = usePersistedState("owb.build.draft", "")
   const [streaming, setStreaming] = useState(false)
+  const [models, setModels] = useState<ModelInfo[]>([])
+  const [currentModel, setCurrentModel] = useState<string>("")
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    fetchBuildModels()
+      .then(({ models, current }) => {
+        setModels(models)
+        setCurrentModel(current)
+      })
+      .catch(() => {})
+  }, [])
 
   const updateLastAssistant = (fn: (turn: Turn & { role: "assistant" }) => Turn) => {
     setTurns((prev) => {
@@ -551,6 +599,26 @@ function BuildPage() {
           <Trash2 className="size-3" />
           Clear chat
         </Button>
+        <Select
+          value={currentModel}
+          onValueChange={(value) => {
+            setCurrentModel(value)
+            switchBuildModel(value).catch(() => {})
+          }}
+          disabled={streaming || models.length === 0}
+        >
+          <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase">
+            <Sparkles className="size-3 text-accent" />
+            <SelectValue placeholder="Model" />
+          </SelectTrigger>
+          <SelectContent>
+            {models.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                {model.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </PageHeader>
 
       {turns.length === 0 ? (
@@ -611,7 +679,7 @@ function BuildPage() {
                               <ToolCall
                                 key={segment.toolCallId}
                                 className="mt-3"
-                                name={segment.toolName}
+                                name={toolCallLabel(segment.toolName, segment.args)}
                                 status={segment.status}
                                 duration={segment.durationMs != null ? `${(segment.durationMs / 1000).toFixed(1)}s` : undefined}
                               >
@@ -646,7 +714,7 @@ function BuildPage() {
                                   {item.items.map((segment) => (
                                     <ToolCall
                                       key={segment.toolCallId}
-                                      name={segment.toolName}
+                                      name={toolCallLabel(segment.toolName, segment.args)}
                                       status={segment.status}
                                       duration={segment.durationMs != null ? `${(segment.durationMs / 1000).toFixed(1)}s` : undefined}
                                     >

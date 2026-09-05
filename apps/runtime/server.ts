@@ -381,6 +381,22 @@ async function main() {
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/api/build-chat/models") {
+        sendJson(res, 200, { models: loadCuratedModels(), current: buildBackend.getModelId() });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/build-chat/model") {
+        const { modelId } = JSON.parse(await readBody(req));
+        if (typeof modelId !== "string" || !modelId) {
+          sendJson(res, 400, { error: "modelId is required" });
+          return;
+        }
+        await buildBackend.setModel(modelId);
+        sendJson(res, 200, { current: buildBackend.getModelId() });
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/api/build-chat") {
         const { message } = JSON.parse(await readBody(req));
         if (typeof message !== "string" || !message.trim()) {

@@ -83,6 +83,12 @@ export async function createPiAgentBackend(
         throw new Error(`Unknown model "${nextModelId}" for provider "${MODEL_PROVIDER}".`);
       }
       await session.setModel(nextModel);
+      // setModel carries the current thinking level forward; a non-reasoning
+      // model forces it to "off", which then silently disables reasoning on
+      // the model being switched to unless we bump it back up here.
+      if (nextModel.reasoning && session.thinkingLevel === "off") {
+        session.setThinkingLevel("medium");
+      }
       modelId = nextModelId;
     },
     getModelId() {

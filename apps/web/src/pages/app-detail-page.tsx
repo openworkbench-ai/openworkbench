@@ -73,6 +73,9 @@ function OverviewTab({
   const [pending, setPending] = useState(false)
 
   const isActive = app.status !== "inactive"
+  const uiComponents = Array.from(
+    new Set((toolsData?.tools ?? []).map((tool) => tool.ui?.component).filter((name): name is string => !!name)),
+  )
 
   async function toggle() {
     setPending(true)
@@ -110,7 +113,18 @@ function OverviewTab({
           <Stat value={toolsData ? toolsData.tools.length : "—"} label="Tools" />
           <Stat value={skillsData ? skillsData.skills.length : "—"} label="Skills" />
           <Stat value={entitiesData ? entitiesData.entities.length : "—"} label="Entities" />
+          <Stat value={toolsData ? uiComponents.length : "—"} label="UI components" />
         </dl>
+
+        {uiComponents.length > 0 ? (
+          <div className="mt-6 flex flex-wrap gap-1.5">
+            {uiComponents.map((name) => (
+              <Badge key={name} variant="outline">
+                {name}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {app.manageable ? (
@@ -149,6 +163,7 @@ function ToolsTab({ appId }: { appId: string }) {
               <Badge variant="muted">
                 {tool.params?.length ?? 0} param{tool.params?.length === 1 ? "" : "s"}
               </Badge>
+              {tool.ui ? <Badge variant="outline">UI: {tool.ui.component}</Badge> : null}
             </span>
           </AccordionTrigger>
           <AccordionContent>

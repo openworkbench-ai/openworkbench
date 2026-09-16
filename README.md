@@ -7,9 +7,13 @@ A minimal agent built with Anthropic's [Pi SDK](https://pi.dev/docs/latest/sdk),
 ```bash
 npm install
 cp .env.example .env
-# edit .env and set OPENROUTER_API_KEY=sk-or-...
+# edit .env and set OPENROUTER_API_KEY=sk-or-... and APP_PASSWORD=...
 export $(cat .env | xargs)
 ```
+
+`APP_PASSWORD` protects every API and agent capability. After a successful
+login, the server sets a signed, HTTP-only cookie that lasts for 12 hours.
+Changing `APP_PASSWORD` immediately invalidates existing sessions.
 
 ## Run
 

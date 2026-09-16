@@ -8,12 +8,14 @@ import { createPiAgentBackend, DEFAULT_MODEL_ID } from "./backends/pi.js";
 import { createBuildAgentBackend } from "./backends/build-agent.js";
 import { resolveHeaders } from "./mcp-tools.js";
 import type { AgentBackend } from "./agent-backend.js";
+import { createPasswordAuth } from "./auth.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
 const MODELS_PATH = new URL("../../pi/models.json", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8787);
 const ENGINE_URL = process.env.ENGINE_URL ?? "http://127.0.0.1:8080";
+const APP_PASSWORD = process.env.APP_PASSWORD;
 
 // Swap this to switch agent backends; both must satisfy AgentBackend.
 const createAgentBackend = createPiAgentBackend;
@@ -73,6 +75,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     "Content-Type": "application/json",
+    "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": "*",
   });
   res.end(payload);
@@ -146,6 +149,12 @@ function loadCatalog(): { apps: LoadedApp[]; appsById: Map<string, LoadedApp>; c
 }
 
 async function main() {
+  if (!APP_PASSWORD) {
+    throw new Error("Missing APP_PASSWORD. Set it in your environment before starting the server.");
+  }
+  const auth = createPasswordAuth(APP_PASSWORD);
+  const failedLogins = new Map<string, { count: number; resetAt: number }>();
+
   let { apps, appsById, capabilities } = loadCatalog();
   for (const app of apps) {
     console.error(`[app] loaded ${app.manifest.name}`);
@@ -207,6 +216,49 @@ async function main() {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
     try {
+      if (url.pathname === "/api/auth/status" && req.method === "GET") {
+        sendJson(res, 200, { authenticated: auth.isAuthenticated(req) });
+        return;
+      }
+
+      if (url.pathname === "/api/auth/login" && req.method === "POST") {
+        const forwarded = req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"];
+        const clientId = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim()
+          ?? req.socket.remoteAddress
+          ?? "unknown";
+        const now = Date.now();
+        const attempts = failedLogins.get(clientId);
+        if (attempts && attempts.resetAt > now && attempts.count >= 5) {
+          res.setHeader("Retry-After", String(Math.ceil((attempts.resetAt - now) / 1000)));
+          sendJson(res, 429, { error: "Too many failed attempts. Try again later." });
+          return;
+        }
+
+        const { password } = JSON.parse(await readBody(req));
+        if (typeof password !== "string" || !auth.verifyPassword(password)) {
+          const current = attempts && attempts.resetAt > now ? attempts.count : 0;
+          failedLogins.set(clientId, { count: current + 1, resetAt: now + 15 * 60 * 1000 });
+          sendJson(res, 401, { error: "Incorrect password." });
+          return;
+        }
+
+        failedLogins.delete(clientId);
+        res.setHeader("Set-Cookie", auth.createSessionCookie(req));
+        sendJson(res, 200, { authenticated: true });
+        return;
+      }
+
+      if (url.pathname === "/api/auth/logout" && req.method === "POST") {
+        res.setHeader("Set-Cookie", auth.clearSessionCookie(req));
+        sendJson(res, 200, { authenticated: false });
+        return;
+      }
+
+      if (!auth.isAuthenticated(req)) {
+        sendJson(res, 401, { error: "Authentication required." });
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/api/apps") {
         const statuses = await fetchAdminStatuses();
         sendJson(res, 200, { apps: apps.map((app) => appToDto(app, statuses)) });

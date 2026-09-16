@@ -70,13 +70,36 @@ export interface ModelInfo {
 }
 
 const BASE = "/api"
+export const AUTH_REQUIRED_EVENT = "openworkbench:auth-required"
 
 async function asJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
+    }
     throw new Error(body.error ?? `Request failed (${res.status})`)
   }
   return res.json()
+}
+
+export async function fetchAuthStatus(): Promise<{ authenticated: boolean }> {
+  return asJson(await fetch(`${BASE}/auth/status`))
+}
+
+export async function login(password: string): Promise<void> {
+  await asJson(
+    await fetch(`${BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    }),
+  )
+}
+
+export async function logout(): Promise<void> {
+  await asJson(await fetch(`${BASE}/auth/logout`, { method: "POST" }))
+  window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
 }
 
 export async function fetchApps(): Promise<{ apps: AppInfo[] }> {

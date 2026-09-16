@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
 import { NavLink } from "react-router-dom"
-import { Hammer, LayoutGrid, MessageSquare } from "lucide-react"
+import { Hammer, LayoutGrid, LogOut, MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { fetchApps } from "@/lib/api"
+import { fetchApps, logout } from "@/lib/api"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
 
 const destinations = [
@@ -50,11 +50,22 @@ function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border px-2 pt-3">
+      <div className="mt-auto flex items-center gap-1 border-t border-border px-2 pt-3">
         <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted-foreground">
           {appCount == null ? "…" : `${appCount} app${appCount === 1 ? "" : "s"} installed`}
         </span>
-        <ThemeToggle />
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            aria-label="Lock workbench"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+            onClick={() => void logout()}
+            title="Lock workbench"
+            type="button"
+          >
+            <LogOut className="size-4" />
+          </button>
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   )

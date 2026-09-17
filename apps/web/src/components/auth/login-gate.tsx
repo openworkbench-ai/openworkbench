@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from "react"
-import { LockKeyhole } from "lucide-react"
+import { useRef, useState, type FormEvent } from "react"
+import { ArrowRight, LockKeyhole } from "lucide-react"
 
+import { LandingPage } from "@/components/auth/landing-page"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { login } from "@/lib/api"
 
@@ -10,9 +10,11 @@ function LoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitting || !password) return
     setError("")
     setSubmitting(true)
     try {
@@ -26,38 +28,38 @@ function LoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
     }
   }
 
+  function enterShowcase() {
+    document.getElementById("access")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" })
+    passwordRef.current?.focus({ preventScroll: true })
+  }
+
   return (
-    <main className="grid min-h-dvh place-items-center bg-canvas p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <span className="mb-2 grid size-12 place-items-center rounded-full bg-primary text-primary-foreground">
-            <LockKeyhole className="size-5" />
-          </span>
-          <CardTitle>Open Workbench</CardTitle>
-          <CardDescription>Enter the showcase password to continue.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-3" onSubmit={handleSubmit}>
-            <Input
-              aria-invalid={Boolean(error)}
-              aria-label="Password"
-              autoComplete="current-password"
-              autoFocus
-              disabled={submitting}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password"
-              required
-              type="password"
-              value={password}
-            />
-            {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
-            <Button className="w-full" disabled={submitting || !password} type="submit">
-              {submitting ? "Unlocking…" : "Unlock workbench"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <LandingPage onEnter={enterShowcase} accessForm={
+      <form aria-label="Unlock workbench" aria-busy={submitting} className="showcase-access" onSubmit={handleSubmit}>
+        <p className="diagram-label"><LockKeyhole aria-hidden="true" /> Early private showcase</p>
+        <h3>Come see what’s possible.</h3>
+        <p>Have the shared password? Enter to explore the workbench and build an app of your own.</p>
+        <label htmlFor="workbench-password">Showcase password</label>
+        <Input
+          ref={passwordRef}
+          id="workbench-password"
+          name="password"
+          className="h-12 text-base"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "login-error login-help" : "login-help"}
+          autoComplete="current-password"
+          disabled={submitting}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Enter password"
+          required
+          type="password"
+          value={password}
+        />
+        {error ? <p id="login-error" className="text-destructive" role="alert">{error}</p> : null}
+        <Button className="h-12 w-full" disabled={submitting || !password} type="submit">{submitting ? "Unlocking…" : "Enter the showcase"}<ArrowRight aria-hidden="true" /></Button>
+        <p id="login-help" className="access-help">Private access · Shared-password login</p>
+      </form>
+    } />
   )
 }
 

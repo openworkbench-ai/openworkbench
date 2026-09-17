@@ -1,0 +1,40 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.engine
+    volumes:
+      - ./catalog:/catalog
+      - openworkbench_data:/data
+    restart: unless-stopped
+    networks: [internal]
+
+  runtime:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.runtime
+    env_file: .env
+    environment:
+      ENGINE_URL: http://engine:8080
+      PORT: "8787"
+    volumes:
+      - ./catalog:/app/catalog
+    depends_on: [engine]
+    restart: unless-stopped
+    networks: [internal]
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8788}:80"
+    depends_on: [runtime]
+    restart: unless-stopped
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  openworkbench_data:

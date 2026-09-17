@@ -23,6 +23,38 @@ npm start -- "What files are in the current directory?"
 
 The model used is configured in `pi/models.json` (defaults to `z-ai/glm-5.3-flash` via OpenRouter) — swap `id` to any OpenRouter model slug.
 
+## Deploy with Docker
+
+The repo ships a `compose.yml` that runs the three pieces (`engine/`, `apps/runtime`, `apps/web`) as separate containers, wired together on an internal Docker network. Nothing but the web UI is published to the host.
+
+```bash
+cp .env.example .env
+# edit .env: set OPENROUTER_API_KEY and a strong APP_PASSWORD
+docker compose up -d --build
+```
+
+The UI is then reachable at `http://127.0.0.1:8788` (override with `WEB_BIND`/`WEB_PORT` in `.env`). Put your own reverse proxy (nginx, Caddy, Traefik, a Cloudflare Tunnel, ...) in front of that port for anything beyond local access — this app does not terminate public TLS itself.
+
+Persistent data (the engine's per-app SQLite databases) lives in the `openworkbench_data` Docker volume. `catalog/` is bind-mounted read-write from your checkout into both `engine` and `runtime`, since the in-app build agent writes newly authored apps straight into it — expect `git status` to show new files there after using that feature.
+
+To point the data volume at a specific host path instead of a Docker-managed volume (e.g. to keep it on a separate disk), add a gitignored `compose.override.yml`:
+
+```yaml
+services:
+  engine:
+    volumes:
+      - ./catalog:/catalog
+      - openworkbench_data:/data
+
+volumes:
+  openworkbench_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /path/to/your/data/dir
+```
+
 ## Apps and capabilities
 
 The agent gains capabilities from **apps** — self-contained directories under `apps/<app-name>/` with a manifest:

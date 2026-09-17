@@ -1,0 +1,14 @@
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY engine/go.mod engine/go.sum ./
+RUN go mod download
+COPY engine/ ./
+RUN CGO_ENABLED=0 go build -o /out/pocketknife ./cmd/pocketknife
+
+FROM alpine:3.20
+RUN adduser -D -u 10001 pocketknife
+COPY --from=build /out/pocketknife /usr/local/bin/pocketknife
+USER pocketknife
+EXPOSE 8080
+ENTRYPOINT ["pocketknife"]
+CMD ["-addr", "0.0.0.0:8080", "-catalog", "/catalog", "-data", "/data"]

@@ -3,28 +3,28 @@ import { ArrowDown, ArrowRight, Check, CheckCheck, Database, FileJson, Hammer, L
 
 const examples = [
   {
-    name: "HYROX training", emoji: "🏋️", category: "Training, with a record.",
-    purpose: "Plan workouts, track exercises, and keep the results together.",
-    prompt: "Log my sled push: 4 minutes 32 seconds. Felt strong today.",
-    tool: "log_exercise_result",
-    action: "Creates a result and marks the exercise completed. Both steps run in one database transaction: either both succeed, or neither changes your data.",
-    component: "ResultLogged", result: "Sled Push", kind: "hyrox",
+    name: "Inventory tracker", emoji: "📦", category: "Stock levels, always current.",
+    purpose: "Track items, quantities, and restocks across a catalog.",
+    prompt: "We restocked 20 units of blue mugs this morning.",
+    tool: "adjust_stock_level",
+    action: "Creates a stock movement record and updates the item's on-hand quantity. Both steps run in one database transaction: either both succeed, or neither changes your data.",
+    component: "StockUpdated", result: "Blue Mugs", kind: "inventory",
   },
   {
-    name: "Padel tournament", emoji: "🎾", category: "More playing. Less organizing.",
-    purpose: "Pair players, schedule matches, and record the results of a tournament.",
-    prompt: "Team A won our round-robin match, two sets to one. Record it.",
-    tool: "record_match_result",
-    action: "Updates the match with the sets won, the winning team, and its played status. The match result component displays the saved score.",
-    component: "Match", result: "Round Robin", kind: "padel",
+    name: "Project tracker", emoji: "✅", category: "Work, with less overhead.",
+    purpose: "Assign tasks, track owners and due dates, and record progress.",
+    prompt: "Mark the design review task as done. Assign the follow-up to Priya.",
+    tool: "complete_task",
+    action: "Updates the task status to done, records the completion time, and creates the follow-up task with its assignee.",
+    component: "Task", result: "Design Review", kind: "project",
   },
   {
-    name: "Child development", emoji: "🌱", category: "Small moments. A lasting record.",
-    purpose: "Keep a development checklist, observations, and a diary in one application.",
-    prompt: "Add a diary note for today: a calm afternoon, full of smiles.",
-    tool: "notiz_hinzufuegen",
-    action: "Creates a diary entry linked to the child, with a date, mood, and note. The agent can retrieve these records later with tagebuch_anzeigen.",
-    component: null, result: "Development diary", kind: "child",
+    name: "Expense tracker", emoji: "💰", category: "Spending, kept organized.",
+    purpose: "Log expenses, tag categories, and keep them against a budget.",
+    prompt: "I spent $42 on office supplies this morning. Tag it as operations.",
+    tool: "log_expense",
+    action: "Creates an expense record tagged to a category, linked to the budget it counts against. The agent can retrieve these later to summarize spend by category.",
+    component: null, result: "Expense log", kind: "expense",
   },
 ] as const
 
@@ -62,17 +62,17 @@ function WorkbenchPreview() {
             <p className="diagram-label">{example.component ? "App interface in the conversation" : "Saved application data"}</p>
             <div className={`result-preview result-${example.kind}`}>
               <div className="result-heading"><span aria-hidden="true">{example.emoji}</span><span>{example.result}</span></div>
-              {example.kind === "hyrox" && <>
-                <div className="result-stats"><div><strong>4:32</strong><span>Time</span></div><span className="status-chip"><Check aria-hidden="true" /> completed</span></div>
-                <p className="result-note">Felt strong today.</p>
+              {example.kind === "inventory" && <>
+                <div className="result-stats"><div><strong>+20</strong><span>Units</span></div><span className="status-chip"><Check aria-hidden="true" /> in stock</span></div>
+                <p className="result-note">On-hand quantity updated.</p>
               </>}
-              {example.kind === "padel" && <>
-                <p className="result-note">Result recorded</p>
-                <div className="result-stats"><div><strong>2</strong><span>Team A sets</span></div><span className="score-divider">:</span><div><strong>1</strong><span>Team B sets</span></div></div>
-                <span className="status-chip"><Check aria-hidden="true" /> Winner: Team A</span>
+              {example.kind === "project" && <>
+                <p className="result-note">Task completed</p>
+                <div className="result-stats"><div><strong>Priya</strong><span>Follow-up owner</span></div></div>
+                <span className="status-chip"><Check aria-hidden="true" /> Status: Done</span>
               </>}
-              {example.kind === "child" && <>
-                <dl className="diary-record"><div><dt>Mood</dt><dd>ruhig <span>(calm)</span></dd></div><div><dt>Note</dt><dd>A calm afternoon, full of smiles.</dd></div><div><dt>Linked to</dt><dd>Child record</dd></div></dl>
+              {example.kind === "expense" && <>
+                <dl className="diary-record"><div><dt>Amount</dt><dd>$42.00</dd></div><div><dt>Category</dt><dd>Operations</dd></div><div><dt>Linked to</dt><dd>Monthly budget</dd></div></dl>
               </>}
               <div className="result-storage"><Database aria-hidden="true" /> App-specific SQLite storage</div>
             </div>
@@ -91,19 +91,19 @@ function ProductLoopPreview() {
       <div className="build-use-grid">
         <div className="build-preview">
           <p className="diagram-label"><Hammer aria-hidden="true" /> Building agent <span>01—03</span></p>
-          <div className="mini-prompt">Build an app for our padel tournament. We need teams, matches, and scores.</div>
+          <div className="mini-prompt">Build an app for our project tracker. We need tasks, owners, and due dates.</div>
           <div className="bundle-preview">
-            <p><FileJson aria-hidden="true" /> padel_tournament/</p>
-            <code>manifest.json</code><code>data/player.json</code><code>skills/run-tournament/SKILL.md</code><code>ui/components/Match.tsx</code>
+            <p><FileJson aria-hidden="true" /> project_tracker/</p>
+            <code>manifest.json</code><code>data/task.json</code><code>skills/manage-tasks/SKILL.md</code><code>ui/components/Task.tsx</code>
           </div>
           <div className="review-preview"><span><CheckCheck aria-hidden="true" /> Ready to review</span><span className="install-preview">Install app <ArrowDown aria-hidden="true" /></span></div>
         </div>
         <div className="use-preview">
           <p className="diagram-label"><MessageSquare aria-hidden="true" /> Your regular agent <span>04</span></p>
-          <div className="installed-app"><span className="app-symbol app-symbol-padel" aria-hidden="true">🎾</span><div><strong>Padel Tournament</strong><span><Check aria-hidden="true" /> Installed in your workbench</span></div></div>
-          <div className="mini-prompt">Record our match. Team A won 2–1.</div>
-          <div className="mini-tool"><Terminal aria-hidden="true" /><code>record_match_result</code></div>
-          <div className="mini-result"><span>Round Robin</span><strong>2 <span>:</span> 1</strong><span><Check aria-hidden="true" /> Result recorded</span></div>
+          <div className="installed-app"><span className="app-symbol app-symbol-project" aria-hidden="true">✅</span><div><strong>Project Tracker</strong><span><Check aria-hidden="true" /> Installed in your workbench</span></div></div>
+          <div className="mini-prompt">Mark the design review task as done.</div>
+          <div className="mini-tool"><Terminal aria-hidden="true" /><code>complete_task</code></div>
+          <div className="mini-result"><span>Design Review</span><strong>Done</strong><span><Check aria-hidden="true" /> Task completed</span></div>
         </div>
       </div>
       <figcaption><LayoutGrid aria-hidden="true" /> One app, from the first idea to the next match.</figcaption>

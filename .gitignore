@@ -2,6 +2,13 @@ node_modules/
 dist/
 .env
 pi/models-store.json
+.DS_Store
+
+# catalog/ holds runtime apps (built by the agent or by hand); only the
+# shipped example app is checked in. Everything else a self-hoster builds
+# stays local by default.
+catalog/*
+!catalog/hyrox/
 
 # Engine (Go) — per-app SQLite databases are created at runtime; never committed.
 data.db

@@ -107,3 +107,8 @@ Rather than registering every MCP tool from every server as its own Pi tool — 
 - `mcp({ tool: "tool_name", args: {...} })` — call a tool (add `server` to disambiguate if two servers share a tool name).
 
 A server that fails to connect is skipped with a warning rather than failing the whole run; its tools just won't show up in `list`/`search`. Large tool results are truncated to keep a single call from blowing up context. See `apps/hyrox/` for a working example.
+
+## CI/CD
+
+- `.github/workflows/ci.yml` runs `go vet`/`go test` for `engine/` and builds `apps/web` + tests `apps/runtime` on every push and pull request.
+- `.github/workflows/docker-publish.yml` runs on every push to `main`: it re-runs CI, then builds and pushes multi-arch (`amd64`/`arm64`) images to GHCR as `ghcr.io/openworkbench-ai/openworkbench-{web,runtime,engine}:latest` and `:sha-<short>`, and finally fires a `repository_dispatch` to the private [`openworkbench-deploy`](https://github.com/openworkbench-ai/openworkbench-deploy) repo to trigger a deploy. This requires a `DEPLOY_REPO_DISPATCH_TOKEN` repo secret — a PAT with `repo` scope on `openworkbench-deploy`.

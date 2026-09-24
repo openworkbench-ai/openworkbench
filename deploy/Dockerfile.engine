@@ -8,6 +8,9 @@ RUN CGO_ENABLED=0 go build -o /out/pocketknife ./cmd/pocketknife
 FROM alpine:3.20
 RUN adduser -D -u 10001 pocketknife
 COPY --from=build /out/pocketknife /usr/local/bin/pocketknife
+# The shipped example app. Not served from here -- the catalog is always a
+# mounted volume -- but deployments copy it into an empty catalog on first run.
+COPY catalog/hyrox /usr/share/openworkbench/default-catalog/hyrox
 USER pocketknife
 EXPOSE 8080
 ENTRYPOINT ["pocketknife"]

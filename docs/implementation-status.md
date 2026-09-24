@@ -283,7 +283,7 @@ A static, hand-maintained catalog of OpenRouter models surfaced in the model
 picker: id, display name, `tier` (frontier/balanced/cheap), whether it
 supports reasoning, context window, and per-token cost
 (input/output/cacheRead/cacheWrite) — currently ten entries spanning Claude
-Opus 5/Sonnet 5, GPT-5.6, GLM-5.3, Qwen3.8, Gemini 3.7, Grok 4.6, Kimi K3, and
+Opus 5.5/Sonnet 5, GPT-6, GLM-5.3, Qwen3.8, Gemini 3.7, Grok 4.6, Kimi K3, and
 DeepSeek V4. `server.ts`'s `/api/models` reads this file directly (not
 through the Pi SDK's runtime) purely for display metadata; the Pi SDK's own
 `ModelRuntime` (same file, different consumer) is what actually resolves a

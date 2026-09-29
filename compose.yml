@@ -17,8 +17,10 @@ services:
     environment:
       ENGINE_URL: http://engine:8080
       PORT: "8787"
+      AUTH_DB_PATH: /app/data/auth.db
     volumes:
       - ./catalog:/app/catalog
+      - openworkbench_runtime:/app/data
     depends_on: [engine]
     restart: unless-stopped
     networks: [internal]
@@ -38,3 +40,4 @@ networks:
 
 volumes:
   openworkbench_data:
+  openworkbench_runtime:

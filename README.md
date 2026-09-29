@@ -7,13 +7,30 @@ A minimal agent built with Anthropic's [Pi SDK](https://pi.dev/docs/latest/sdk),
 ```bash
 npm install
 cp .env.example .env
-# edit .env and set OPENROUTER_API_KEY=sk-or-... and APP_PASSWORD=...
+# edit .env and set OPENROUTER_API_KEY=sk-or-...
 export $(cat .env | xargs)
 ```
 
-`APP_PASSWORD` protects every API and agent capability. After a successful
-login, the server sets a signed, HTTP-only cookie that lasts for 12 hours.
-Changing `APP_PASSWORD` immediately invalidates existing sessions.
+### Accounts
+
+Every API and agent capability requires an account (email + password). The first
+account you create always works, and it inherits any apps that already exist in
+`catalog/`. After that, sign-ups are closed unless you set `ALLOW_SIGNUP=true`.
+
+Each user has their own apps, app data, chat, and build conversation: an app is
+visible only to the account that built it, and one user can't read or open
+another's. Passwords are stored as salted scrypt hashes; a login sets an
+HTTP-only, `SameSite=Strict` session cookie (7 days) backed by a server-side
+session, so signing out takes effect immediately.
+
+Tenancy and login are deliberately separate. The core only asks an
+`AuthProvider` (`apps/runtime/auth-provider.ts`) "who is this request from?" and
+records which user id owns which app (`data/ownership.db`, override with
+`OWNERSHIP_DB_PATH`). The built-in email/password provider keeps its accounts and
+sessions in `data/auth.db` (`AUTH_DB_PATH`). To use a hosted provider (Clerk,
+WorkOS, an OIDC IdP, ...), implement `AuthProvider` and construct it in
+`server.ts` instead — ownership keeps working as long as its user ids stay stable.
+Keep the `data/` directory on a persistent volume and back it up.
 
 ## Run
 
@@ -29,13 +46,13 @@ The repo ships a `compose.yml` that runs the three pieces (`engine/`, `apps/runt
 
 ```bash
 cp .env.example .env
-# edit .env: set OPENROUTER_API_KEY and a strong APP_PASSWORD
+# edit .env: set OPENROUTER_API_KEY (and ALLOW_SIGNUP=true if others should be able to sign up)
 docker compose up -d --build
 ```
 
 The UI is then reachable at `http://127.0.0.1:8788` (override with `WEB_BIND`/`WEB_PORT` in `.env`). Put your own reverse proxy (nginx, Caddy, Traefik, a Cloudflare Tunnel, ...) in front of that port for anything beyond local access — this app does not terminate public TLS itself.
 
-Persistent data (the engine's per-app SQLite databases) lives in the `openworkbench_data` Docker volume. `catalog/` is bind-mounted read-write from your checkout into both `engine` and `runtime`, since the in-app build agent writes newly authored apps straight into it. Only `catalog/hyrox` (the shipped example app) is tracked in git; everything else under `catalog/` is gitignored by default, so apps you build or the agent builds for you stay local unless you explicitly `git add` them.
+Persistent data lives in Docker volumes: the engine's per-app SQLite databases in `openworkbench_data`, and accounts/sessions in `openworkbench_runtime`. `catalog/` is bind-mounted read-write from your checkout into both `engine` and `runtime`, since the in-app build agent writes newly authored apps straight into it. Only `catalog/hyrox` (the shipped example app) is tracked in git; everything else under `catalog/` is gitignored by default, so apps you build or the agent builds for you stay local unless you explicitly `git add` them.
 
 To point the data volume at a specific host path instead of a Docker-managed volume (e.g. to keep it on a separate disk), add a gitignored `compose.override.yml`:
 

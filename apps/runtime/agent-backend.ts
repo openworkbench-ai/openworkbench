@@ -65,6 +65,10 @@ export interface AgentBackend {
   respondToTool?(toolCallId: string, value: unknown): boolean;
   /** Reads a build agent's drafted app off its scratch workspace, for the review card. Returns null if not found. */
   readDraft?(id: string): AppDraft | null;
-  /** Saves and installs a build agent's drafted app — the user-initiated "Install" action, never called by the agent itself. */
-  installDraft?(id: string): Promise<InstallResult>;
+  /**
+   * Saves and installs a build agent's drafted app — the user-initiated "Install" action, never called by the agent itself.
+   * `installId` is the engine-side app id to install it under (defaults to the draft's own `id`); the runtime
+   * passes a per-user namespaced one so two users' apps can never collide.
+   */
+  installDraft?(id: string, installId?: string): Promise<InstallResult>;
 }

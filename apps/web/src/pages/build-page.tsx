@@ -393,7 +393,7 @@ function AppPreviewCard({ appId }: { appId: string }) {
     setInstalling(false)
     if (result.ok) {
       setInstalled(true)
-      navigate(`/apps/${appId}`)
+      navigate(`/apps/${result.appId ?? appId}`)
     } else {
       setInstallError(result.message)
     }

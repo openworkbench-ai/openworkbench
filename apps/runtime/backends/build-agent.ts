@@ -166,8 +166,8 @@ export async function createBuildAgentBackend(
         ui,
       };
     },
-    installDraft(id) {
-      return saveAndInstall(workspaceRoot, engineUrl, id);
+    installDraft(id, installId) {
+      return saveAndInstall(workspaceRoot, engineUrl, id, installId);
     },
     async dispose() {
       rmSync(workspaceRoot, { recursive: true, force: true });

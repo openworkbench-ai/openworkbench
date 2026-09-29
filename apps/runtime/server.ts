@@ -1,6 +1,6 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { loadApps, loadCatalogApps, readSkills, type Capabilities, type LoadedApp, type McpServerConfig } from "./app-loader.js";
@@ -8,14 +8,24 @@ import { createPiAgentBackend, DEFAULT_MODEL_ID } from "./backends/pi.js";
 import { createBuildAgentBackend } from "./backends/build-agent.js";
 import { resolveHeaders } from "./mcp-tools.js";
 import type { AgentBackend } from "./agent-backend.js";
-import { createPasswordAuth } from "./auth.js";
+import type { AuthProvider } from "./auth-provider.js";
+import { sendJson } from "./http.js";
+import { createOwnershipStore } from "./ownership-store.js";
+import { createPasswordProvider } from "./password-provider.js";
+import { createUserStore } from "./user-store.js";
+import { createUserRuntimes } from "./user-runtime.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
 const MODELS_PATH = new URL("../../pi/models.json", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8787);
 const ENGINE_URL = process.env.ENGINE_URL ?? "http://127.0.0.1:8080";
-const APP_PASSWORD = process.env.APP_PASSWORD;
+const AUTH_DB_PATH = process.env.AUTH_DB_PATH ?? new URL("../../data/auth.db", import.meta.url).pathname;
+// Which app belongs to which user. Kept apart from the accounts file so it outlives the built-in auth provider.
+const OWNERSHIP_DB_PATH = process.env.OWNERSHIP_DB_PATH ?? join(dirname(AUTH_DB_PATH), "ownership.db");
+// The first account can always be created; further sign-ups need this opt-in, so a
+// self-hosted instance exposed to the internet doesn't hand out model spend to strangers.
+const ALLOW_SIGNUP = process.env.ALLOW_SIGNUP === "true";
 
 // Swap this to switch agent backends; both must satisfy AgentBackend.
 const createAgentBackend = createPiAgentBackend;
@@ -69,16 +79,6 @@ function matchToggleRoute(pathname: string): { id: string; action: ToggleAction 
   const action = segments[3];
   if (action !== "activate" && action !== "deactivate") return null;
   return { id: segments[2], action };
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*",
-  });
-  res.end(payload);
 }
 
 type AppRouteMatch =
@@ -135,6 +135,19 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+/** Engine-side id for an app a user builds: namespaced by user so two users' drafts named "tracker" can't collide. */
+function installIdFor(userId: string, draftId: string): string {
+  return `u${userId.replace(/-/g, "").slice(0, 12)}_${draftId}`;
+}
+
+/** Narrows the process-wide capabilities to the apps one user can see (their own catalog apps plus any shared file-based apps). */
+function capabilitiesFor(all: Capabilities, visibleIds: Set<string>): Capabilities {
+  return {
+    skillPaths: all.skillPaths.filter((p) => visibleIds.has(basename(dirname(p)))),
+    mcpServers: all.mcpServers.filter((s) => visibleIds.has(s.name)),
+  };
+}
+
 /** Scans both app sources fresh and derives the DTOs the rest of main() needs. Called at boot and again on every /api/apps/reload. */
 function loadCatalog(): { apps: LoadedApp[]; appsById: Map<string, LoadedApp>; capabilities: Capabilities } {
   const fileApps = loadApps(APPS_DIR);
@@ -149,48 +162,51 @@ function loadCatalog(): { apps: LoadedApp[]; appsById: Map<string, LoadedApp>; c
 }
 
 async function main() {
-  if (!APP_PASSWORD) {
-    throw new Error("Missing APP_PASSWORD. Set it in your environment before starting the server.");
-  }
-  const auth = createPasswordAuth(APP_PASSWORD);
-  const failedLogins = new Map<string, { count: number; resetAt: number }>();
+  // The one place an auth provider is chosen. To use a hosted provider (Clerk, WorkOS, OIDC...),
+  // construct an AuthProvider for it here instead -- nothing below knows how people sign in.
+  const auth: AuthProvider = createPasswordProvider(createUserStore(AUTH_DB_PATH), { allowSignup: ALLOW_SIGNUP });
+  const ownership = createOwnershipStore(OWNERSHIP_DB_PATH);
 
   let { apps, appsById, capabilities } = loadCatalog();
   for (const app of apps) {
     console.error(`[app] loaded ${app.manifest.name}`);
   }
 
-  let backend: AgentBackend = await createAgentBackend(capabilities, DEFAULT_MODEL_ID);
-  let streaming = false;
+  /** Apps a user may see and use: shared file-based apps plus the catalog apps they own. */
+  function visibleAppIds(userId: string): Set<string> {
+    const owned = ownership.appsOwnedBy(userId);
+    return new Set(apps.filter((app) => !app.engine || owned.has(basename(app.dir))).map((app) => basename(app.dir)));
+  }
 
-  // The build agent never sees installed apps' capabilities -- its job is to
-  // produce a new app via its own scratch workspace, not use existing ones
-  // (see createBuildAgentBackend) -- so unlike `backend` above it has no
-  // reload path and is created once for the process lifetime. Its own
-  // `streaming` guard is independent of the chat backend's, so a build
-  // conversation and a regular chat conversation never block each other.
-  const buildBackend: AgentBackend = await createBuildAgentBackend(ENGINE_URL, DEFAULT_MODEL_ID);
-  let buildStreaming = false;
+  /** Looks up an app by id, but only if `userId` may see it -- someone else's app is indistinguishable from a missing one. */
+  function appFor(userId: string, id: string): LoadedApp | undefined {
+    const app = appsById.get(id);
+    return app && visibleAppIds(userId).has(id) ? app : undefined;
+  }
+
+  function appListFor(userId: string, statuses: Map<string, string>) {
+    const visible = visibleAppIds(userId);
+    return apps.filter((app) => visible.has(basename(app.dir))).map((app) => appToDto(app, statuses));
+  }
+
+  // Every user gets their own chat agent (over just their apps) and their own build
+  // agent + scratch workspace, created on first use -- no conversation, model choice,
+  // or half-built draft is shared between accounts.
+  const runtimes = createUserRuntimes({
+    createChat: (caps, modelId) => createAgentBackend(caps, modelId ?? DEFAULT_MODEL_ID),
+    createBuild: (modelId) => createBuildAgentBackend(ENGINE_URL, modelId ?? DEFAULT_MODEL_ID),
+    capabilitiesFor: (userId) => capabilitiesFor(capabilities, visibleAppIds(userId)),
+  });
+
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
-      await buildBackend.dispose?.();
+      await runtimes.disposeAll();
       process.exit(0);
     });
   }
 
-  // Re-scans app.json/manifest.json from disk and rebuilds the agent backend
-  // with whatever capabilities they now declare — the mechanism that lets an
-  // app be installed/activated/deactivated (see engine/adminapi) without
-  // restarting this process. Guarded on `streaming`, exactly like /api/chat,
-  // rather than queued: recreating the backend mid-response would pull the
-  // rug out from under an in-flight tool call, and conversation history
-  // lives inside the one Pi session being replaced, so a reload always
-  // starts a fresh conversation — an accepted v0.1 limitation, not
-  // attempted here.
-  async function reloadApps(): Promise<{ ok: true } | { ok: false; reason: string }> {
-    if (streaming) {
-      return { ok: false, reason: "the agent is still responding to a previous message" };
-    }
+  /** Re-scans app.json/manifest.json from disk, then rebuilds this user's chat agent so it sees their current apps. Other users' agents are unaffected: they can't see this user's apps. */
+  async function reloadApps(userId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
     const next = loadCatalog();
     apps = next.apps;
     appsById = next.appsById;
@@ -198,7 +214,12 @@ async function main() {
     for (const app of apps) {
       console.error(`[app] loaded ${app.manifest.name}`);
     }
-    backend = await createAgentBackend(capabilities, backend.getModelId());
+    // Refused while a response is streaming rather than queued: recreating the backend mid-response
+    // would pull the rug out from under an in-flight tool call, and history lives inside the
+    // one Pi session being replaced, so a refresh starts a fresh conversation.
+    if (!(await runtimes.forUser(userId).refreshChat())) {
+      return { ok: false, reason: "the agent is still responding to a previous message" };
+    }
     return { ok: true };
   }
 
@@ -217,68 +238,44 @@ async function main() {
 
     try {
       if (url.pathname === "/api/auth/status" && req.method === "GET") {
-        sendJson(res, 200, { authenticated: auth.isAuthenticated(req) });
+        const identity = await auth.authenticate(req);
+        sendJson(res, 200, {
+          authenticated: identity != null,
+          user: identity ?? undefined,
+          signIn: auth.signIn(),
+        });
         return;
       }
 
-      if (url.pathname === "/api/auth/login" && req.method === "POST") {
-        const forwarded = req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"];
-        const clientId = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim()
-          ?? req.socket.remoteAddress
-          ?? "unknown";
-        const now = Date.now();
-        const attempts = failedLogins.get(clientId);
-        if (attempts && attempts.resetAt > now && attempts.count >= 5) {
-          res.setHeader("Retry-After", String(Math.ceil((attempts.resetAt - now) / 1000)));
-          sendJson(res, 429, { error: "Too many failed attempts. Try again later." });
-          return;
-        }
+      if (url.pathname.startsWith("/api/auth/") && (await auth.handleRoute?.(req, res, url))) return;
 
-        const { password } = JSON.parse(await readBody(req));
-        if (typeof password !== "string" || !auth.verifyPassword(password)) {
-          const current = attempts && attempts.resetAt > now ? attempts.count : 0;
-          failedLogins.set(clientId, { count: current + 1, resetAt: now + 15 * 60 * 1000 });
-          sendJson(res, 401, { error: "Incorrect password." });
-          return;
-        }
-
-        failedLogins.delete(clientId);
-        res.setHeader("Set-Cookie", auth.createSessionCookie(req));
-        sendJson(res, 200, { authenticated: true });
-        return;
-      }
-
-      if (url.pathname === "/api/auth/logout" && req.method === "POST") {
-        res.setHeader("Set-Cookie", auth.clearSessionCookie(req));
-        sendJson(res, 200, { authenticated: false });
-        return;
-      }
-
-      if (!auth.isAuthenticated(req)) {
+      const user = await auth.authenticate(req);
+      if (!user) {
         sendJson(res, 401, { error: "Authentication required." });
         return;
       }
+      // Apps from before ownership existed go to whoever signs in first on this instance (once, ever).
+      ownership.claimExistingOnce(user.id, apps.filter((app) => app.engine).map((app) => basename(app.dir)));
+      const runtime = runtimes.forUser(user.id);
 
       if (req.method === "GET" && url.pathname === "/api/apps") {
-        const statuses = await fetchAdminStatuses();
-        sendJson(res, 200, { apps: apps.map((app) => appToDto(app, statuses)) });
+        sendJson(res, 200, { apps: appListFor(user.id, await fetchAdminStatuses()) });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/apps/reload") {
-        const result = await reloadApps();
+        const result = await reloadApps(user.id);
         if (!result.ok) {
           sendJson(res, 409, { error: result.reason });
           return;
         }
-        const statuses = await fetchAdminStatuses();
-        sendJson(res, 200, { apps: apps.map((app) => appToDto(app, statuses)) });
+        sendJson(res, 200, { apps: appListFor(user.id, await fetchAdminStatuses()) });
         return;
       }
 
       const toggleMatch = req.method === "POST" ? matchToggleRoute(url.pathname) : null;
       if (toggleMatch) {
-        const app = appsById.get(toggleMatch.id);
+        const app = appFor(user.id, toggleMatch.id);
         if (!app) {
           sendJson(res, 404, { error: `unknown app "${toggleMatch.id}"` });
           return;
@@ -301,7 +298,7 @@ async function main() {
 
       const appSegments = req.method === "GET" ? matchAppRoute(url.pathname) : null;
       if (appSegments) {
-        const app = appsById.get(appSegments.id);
+        const app = appFor(user.id, appSegments.id);
         if (!app) {
           sendJson(res, 404, { error: `unknown app "${appSegments.id}"` });
           return;
@@ -339,7 +336,9 @@ async function main() {
       const mcpProxyMatch = matchMcpProxyRoute(url.pathname);
       if (mcpProxyMatch && ((req.method === "GET" && mcpProxyMatch.kind === "resource") || (req.method === "POST" && mcpProxyMatch.kind === "call"))) {
         const mcpServer = capabilities.mcpServers.find((s) => s.name === mcpProxyMatch.id);
-        if (!mcpServer) {
+        // Catalog apps are per-user: an MCP server named after an app someone else owns is off limits.
+        const ownedByOther = appsById.has(mcpProxyMatch.id) && !appFor(user.id, mcpProxyMatch.id);
+        if (!mcpServer || ownedByOther) {
           sendJson(res, 404, { error: `unknown app "${mcpProxyMatch.id}"` });
           return;
         }
@@ -374,7 +373,7 @@ async function main() {
       }
 
       if (req.method === "GET" && url.pathname === "/api/models") {
-        sendJson(res, 200, { models: loadCuratedModels(), current: backend.getModelId() });
+        sendJson(res, 200, { models: loadCuratedModels(), current: (await runtime.chat()).getModelId() });
         return;
       }
 
@@ -384,6 +383,7 @@ async function main() {
           sendJson(res, 400, { error: "modelId is required" });
           return;
         }
+        const backend = await runtime.chat();
         await backend.setModel(modelId);
         sendJson(res, 200, { current: backend.getModelId() });
         return;
@@ -395,12 +395,13 @@ async function main() {
           sendJson(res, 400, { error: "message is required" });
           return;
         }
-        if (streaming) {
+        if (runtime.streaming) {
           sendJson(res, 409, { error: "the agent is still responding to a previous message" });
           return;
         }
 
-        streaming = true;
+        const backend = await runtime.chat();
+        runtime.streaming = true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -427,14 +428,14 @@ async function main() {
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
         } finally {
           res.off("close", onClientGone);
-          streaming = false;
+          runtime.streaming = false;
           if (!res.writableEnded) res.end();
         }
         return;
       }
 
       if (req.method === "GET" && url.pathname === "/api/build-chat/models") {
-        sendJson(res, 200, { models: loadCuratedModels(), current: buildBackend.getModelId() });
+        sendJson(res, 200, { models: loadCuratedModels(), current: (await runtime.build()).getModelId() });
         return;
       }
 
@@ -444,6 +445,7 @@ async function main() {
           sendJson(res, 400, { error: "modelId is required" });
           return;
         }
+        const buildBackend = await runtime.build();
         await buildBackend.setModel(modelId);
         sendJson(res, 200, { current: buildBackend.getModelId() });
         return;
@@ -455,12 +457,13 @@ async function main() {
           sendJson(res, 400, { error: "message is required" });
           return;
         }
-        if (buildStreaming) {
+        if (runtime.buildStreaming) {
           sendJson(res, 409, { error: "the build agent is still responding to a previous message" });
           return;
         }
 
-        buildStreaming = true;
+        const buildBackend = await runtime.build();
+        runtime.buildStreaming = true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -487,7 +490,7 @@ async function main() {
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "error", reason })}\n\n`);
         } finally {
           res.off("close", onClientGone);
-          buildStreaming = false;
+          runtime.buildStreaming = false;
           if (!res.writableEnded) res.end();
         }
         return;
@@ -499,7 +502,7 @@ async function main() {
           sendJson(res, 400, { error: "toolCallId and answers are required" });
           return;
         }
-        const resolved = buildBackend.respondToTool?.(toolCallId, answers) ?? false;
+        const resolved = (await runtime.build()).respondToTool?.(toolCallId, answers) ?? false;
         if (!resolved) {
           sendJson(res, 404, { error: `no pending question with toolCallId "${toolCallId}"` });
           return;
@@ -510,7 +513,7 @@ async function main() {
 
       if (req.method === "GET" && url.pathname.startsWith("/api/build-chat/draft/")) {
         const id = url.pathname.slice("/api/build-chat/draft/".length);
-        const draft = id ? buildBackend.readDraft?.(id) ?? null : null;
+        const draft = id ? (await runtime.build()).readDraft?.(id) ?? null : null;
         if (!draft) {
           sendJson(res, 404, { error: `no draft "${id}" in the build agent's workspace` });
           return;
@@ -525,23 +528,28 @@ async function main() {
           sendJson(res, 400, { error: "id is required" });
           return;
         }
+        const buildBackend = await runtime.build();
         if (!buildBackend.installDraft) {
           sendJson(res, 501, { error: "this backend cannot install drafts" });
           return;
         }
-        const result = await buildBackend.installDraft(id);
+        // Installed under a per-user id, and recorded as theirs so no one else can see or open it.
+        const installId = installIdFor(user.id, id);
+        const result = await buildBackend.installDraft(id, installId);
         if (result.ok) {
+          ownership.claim(installId, user.id);
           // installDraft just wrote a brand-new app straight into the engine's catalog dir --
           // this process's own `apps`/`appsById` were built once at boot and have no entry for it
           // yet, so /api/apps/:id/* would 404 until something reloads. Do that now so the app is
           // visible the moment the frontend navigates to it, instead of only after a restart.
-          const reload = await reloadApps();
+          const reload = await reloadApps(user.id);
           if (!reload.ok) {
-            sendJson(res, 200, { ...result, message: `${result.message} (catalog reload pending: ${reload.reason})` });
+            sendJson(res, 200, { ...result, appId: installId, message: `${result.message} (catalog reload pending: ${reload.reason})` });
             return;
           }
         }
-        sendJson(res, result.ok ? 200 : result.status, result);
+        // `appId` is the id the app now lives under (namespaced per user), which the UI must navigate to.
+        sendJson(res, result.ok ? 200 : result.status, result.ok ? { ...result, appId: installId } : result);
         return;
       }
 

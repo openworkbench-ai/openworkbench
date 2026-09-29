@@ -83,22 +83,60 @@ async function asJson<T>(res: Response): Promise<T> {
   return res.json()
 }
 
-export async function fetchAuthStatus(): Promise<{ authenticated: boolean }> {
+export interface AuthUser {
+  id: string
+  email: string
+}
+
+/** How to prompt an unauthenticated visitor, as chosen by the server's auth provider. */
+export type SignInMethod =
+  /** Built-in email/password form. `signupOpen` is false on a private instance that already has its first account. */
+  | { kind: "password"; signupOpen: boolean }
+  /** Hosted sign-in: send the browser to `url`. */
+  | { kind: "redirect"; url: string }
+
+export interface AuthStatus {
+  authenticated: boolean
+  user?: AuthUser
+  signIn: SignInMethod
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
   return asJson(await fetch(`${BASE}/auth/status`))
 }
 
-export async function login(password: string): Promise<void> {
-  await asJson(
-    await fetch(`${BASE}/auth/login`, {
+async function postCredentials(path: "login" | "register", email: string, password: string): Promise<AuthUser> {
+  const { user } = await asJson<{ user: AuthUser }>(
+    await fetch(`${BASE}/auth/${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email, password }),
     }),
   )
+  clearLocalSession()
+  return user
+}
+
+export function login(email: string, password: string): Promise<AuthUser> {
+  return postCredentials("login", email, password)
+}
+
+export function register(email: string, password: string): Promise<AuthUser> {
+  return postCredentials("register", email, password)
+}
+
+/** Chat transcripts live in sessionStorage (see persisted-state); drop them whenever the account changes so the next user never sees the last one's. */
+function clearLocalSession() {
+  try {
+    sessionStorage.clear()
+  } catch {
+    // storage unavailable -- nothing to clear
+  }
 }
 
 export async function logout(): Promise<void> {
   await asJson(await fetch(`${BASE}/auth/logout`, { method: "POST" }))
+  clearLocalSession()
   window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
 }
 
@@ -306,7 +344,8 @@ export async function fetchBuildDraft(id: string): Promise<AppDraft> {
   return asJson(await fetch(`${BASE}/build-chat/draft/${id}`))
 }
 
-export type InstallResult = { ok: true; message: string } | { ok: false; status: number; message: string }
+/** `appId` is the id the app was installed under, which may differ from the draft's (installs are namespaced per user). */
+export type InstallResult = { ok: true; message: string; appId?: string } | { ok: false; status: number; message: string }
 
 /**
  * Saves and installs a drafted app — the user-initiated action behind the review card's "Install" button. Resolves

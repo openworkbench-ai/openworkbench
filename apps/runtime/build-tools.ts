@@ -213,10 +213,11 @@ async function validateDraft(
 export async function saveAndInstall(
   workspaceRoot: string,
   engineUrl: string,
-  id: string
+  id: string,
+  installId: string = id
 ): Promise<{ ok: true; message: string } | { ok: false; status: number; message: string }> {
-  if (!APP_ID_PATTERN.test(id)) {
-    return { ok: false, status: 400, message: `"${id}" is not a valid app id (expected ^[a-z][a-z0-9_]*$).` };
+  if (!APP_ID_PATTERN.test(id) || !APP_ID_PATTERN.test(installId)) {
+    return { ok: false, status: 400, message: `"${installId}" is not a valid app id (expected ^[a-z][a-z0-9_]*$).` };
   }
   const bundle = readAppBundle(workspaceRoot, id);
   if ("error" in bundle) return { ok: false, status: 400, message: bundle.error };
@@ -224,11 +225,17 @@ export async function saveAndInstall(
   const ui = await buildAppUi(workspaceRoot, id);
   if ("error" in ui) return { ok: false, status: 400, message: `UI build failed: ${ui.error}` };
 
-  const saveRes = await fetch(`${engineUrl}/admin/apps/${id}`, {
+  // The draft lives in the workspace under its own short id; it's installed under
+  // `installId` (namespaced per user by the caller), and the engine requires the
+  // manifest's app.id to match the URL id.
+  const manifest = JSON.parse(bundle.manifestRaw);
+  if (manifest.app) manifest.app.id = installId;
+
+  const saveRes = await fetch(`${engineUrl}/admin/apps/${installId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      manifest: JSON.parse(bundle.manifestRaw),
+      manifest,
       skills: bundle.skills.length > 0 ? bundle.skills : undefined,
       data: bundle.data.length > 0 ? bundle.data : undefined,
       ui: ui.components.length > 0 ? ui.components : undefined,
@@ -239,7 +246,7 @@ export async function saveAndInstall(
     return { ok: false, status: saveRes.status, message: `Save rejected: ${saveBody}` };
   }
 
-  const installRes = await fetch(`${engineUrl}/admin/apps/${id}/install`, { method: "POST" });
+  const installRes = await fetch(`${engineUrl}/admin/apps/${installId}/install`, { method: "POST" });
   const installBody = await installRes.text();
   if (!installRes.ok) {
     return { ok: false, status: installRes.status, message: `Saved, but install was rejected: ${installBody}` };

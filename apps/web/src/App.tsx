@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router-dom"
 import { LoginGate } from "@/components/auth/login-gate"
 import { Sidebar } from "@/components/shell/sidebar"
 import { Toaster } from "@/components/ui/toast"
-import { AUTH_REQUIRED_EVENT, fetchAuthStatus } from "@/lib/api"
+import { AUTH_REQUIRED_EVENT, fetchAuthStatus, type AuthUser, type SignInMethod } from "@/lib/api"
 import { AgentPage } from "@/pages/agent-page"
 import { AppDetailPage } from "@/pages/app-detail-page"
 import { AppsPage } from "@/pages/apps-page"
@@ -12,12 +12,21 @@ import { BuildPage } from "@/pages/build-page"
 
 function App() {
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "required">("checking")
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [signIn, setSignIn] = useState<SignInMethod>({ kind: "password", signupOpen: false })
 
   useEffect(() => {
-    const requireAuth = () => setAuthState("required")
+    const requireAuth = () => {
+      setUser(null)
+      setAuthState("required")
+    }
     window.addEventListener(AUTH_REQUIRED_EVENT, requireAuth)
     fetchAuthStatus()
-      .then(({ authenticated }) => setAuthState(authenticated ? "authenticated" : "required"))
+      .then((status) => {
+        setSignIn(status.signIn)
+        setUser(status.user ?? null)
+        setAuthState(status.authenticated ? "authenticated" : "required")
+      })
       .catch(() => setAuthState("required"))
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuth)
   }, [])
@@ -31,12 +40,20 @@ function App() {
   }
 
   if (authState === "required") {
-    return <LoginGate onAuthenticated={() => setAuthState("authenticated")} />
+    return (
+      <LoginGate
+        signIn={signIn}
+        onAuthenticated={(authenticated) => {
+          setUser(authenticated)
+          setAuthState("authenticated")
+        }}
+      />
+    )
   }
 
   return (
     <div className="flex h-dvh bg-canvas">
-      <Sidebar />
+      <Sidebar user={user} />
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <Routes>
           <Route path="/" element={<AgentPage />} />

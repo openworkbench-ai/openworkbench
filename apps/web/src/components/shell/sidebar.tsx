@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom"
 import { Hammer, LayoutGrid, LogOut, MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { fetchApps, logout } from "@/lib/api"
+import { fetchApps, logout, type AuthUser } from "@/lib/api"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
 
 const destinations = [
@@ -13,7 +13,7 @@ const destinations = [
 ]
 
 /** Left rail: brand mark, the screens this build ships, and app count. */
-function Sidebar() {
+function Sidebar({ user }: { user: AuthUser | null }) {
   const [appCount, setAppCount] = useState<number | null>(null)
 
   useEffect(() => {
@@ -50,16 +50,21 @@ function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto flex items-center gap-1 border-t border-border px-2 pt-3">
+      <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border px-2 pt-3">
+        {user ? (
+          <span className="w-full truncate pb-1 text-xs text-muted-foreground" title={user.email}>
+            {user.email}
+          </span>
+        ) : null}
         <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted-foreground">
           {appCount == null ? "…" : `${appCount} app${appCount === 1 ? "" : "s"} installed`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button
-            aria-label="Lock workbench"
+            aria-label="Sign out"
             className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
             onClick={() => void logout()}
-            title="Lock workbench"
+            title="Sign out"
             type="button"
           >
             <LogOut className="size-4" />

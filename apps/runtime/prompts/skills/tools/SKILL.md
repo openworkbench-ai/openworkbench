@@ -1,6 +1,6 @@
 ---
 name: tools
-description: The Open Workbench tool DSL — steps, params, set/filter, $params/$steps references — plus guidance on designing task-oriented tools instead of raw CRUD. Read this before writing an app's `tools` array.
+description: Open Workbench tools — CRUD steps, params, references, and Python functions executed as Wasm. Read this before writing an app's tools array or Python function source.
 ---
 
 # Tools
@@ -31,6 +31,65 @@ action (a todo app's `create_task` needs nothing fancier).
   skill) the caller supplies when invoking the tool.
 - `steps`: an ordered, **non-branching** sequence of CRUD operations
   against this app's own entities.
+
+## Python function tools
+
+For calculations or transformations requiring arbitrary logic, use a Python
+function instead of `steps`. Declare it in the manifest's top-level `functions`
+array, then reference its stable ID from a tool:
+
+```json
+{
+  "functions": [{
+    "id": "fn_calculate", "name": "calculate", "runtime": "python",
+    "entry": "functions/calculate.py", "handler": "calculate",
+    "capabilities": {}
+  }],
+  "tools": [{
+    "id": "tool_calculate", "name": "calculate", "description": "Calculate a total",
+    "function": "fn_calculate",
+    "params": [
+      { "id": "p_price", "name": "price", "type": "real", "required": true },
+      { "id": "p_quantity", "name": "quantity", "type": "integer", "required": true }
+    ]
+  }]
+}
+```
+
+Write `<app-id>/functions/calculate.py`:
+
+```python
+def calculate(price, quantity):
+    return {"total": round(price * quantity, 2)}
+```
+
+- A tool must have exactly one implementation: `function` or `steps`.
+- `handler` defaults to `main`; parameters are passed as keyword arguments.
+  Omitted optional parameters without manifest defaults use Python defaults.
+- The return value must be JSON serializable. Objects are returned directly;
+  lists, scalars and `None` are wrapped as `{"result": value}` by MCP.
+- This runs as WASI CPython inside the Go engine, with a fresh instance for
+  every call: no state persists between calls. Prints do not enter the result.
+- Declare dependencies in top-level `"python": {"packages": ["package==version"]}`.
+  The builder resolves normal indexed package requirements and transitive
+  dependencies, bundles portable wheels, and the engine imports them inside
+  Wasm. There is no per-package whitelist. Native extensions require a
+  compatible Wasm build; this distribution supports portable pure-Python wheels.
+- Grant HTTPS access with function `"capabilities": {"network": ["example.com"]}`.
+  Existing `urllib.request.urlopen` calls are adapted to the engine's fetch;
+  exact hostnames are checked on every redirect. Raw sockets stay unavailable.
+  `pocketknife.urlopen` exposes the same bridge. Other HTTP libraries that use
+  raw sockets need their own adapter.
+- No host environment, subprocesses, writable filesystem or Python bridges to
+  app data/model capabilities. Use separate CRUD tools to read/persist data.
+- Limits: 128 MiB memory, a default 5 seconds per invocation (including
+  interpreter startup), 1 MiB combined source/arguments and 1 MiB output.
+  Set function `timeoutSeconds` (1–120) for longer network workflows.
+  Network responses are capped at 4 MiB. Exceptions,
+  syntax errors and timeouts are tool errors visible to the calling agent.
+- The build tools include declared Python source files when saving/installing
+  the app; `validate_app` checks their presence/references and resolves packages.
+- Catalog apps still need at least one entity. Use CRUD tools for persistence.
 
 ## Steps
 

@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"pocketknife/lifecycle"
+	"pocketknife/pythonpackages"
 	"pocketknife/validate"
 )
 
@@ -52,10 +55,17 @@ type saveUIComponent struct {
 }
 
 type saveRequest struct {
-	Manifest json.RawMessage   `json:"manifest"`
-	Skills   []saveSkill       `json:"skills,omitempty"`
-	Data     []saveDataFile    `json:"data,omitempty"`
-	UI       []saveUIComponent `json:"ui,omitempty"`
+	Manifest      json.RawMessage        `json:"manifest"`
+	Skills        []saveSkill            `json:"skills,omitempty"`
+	Data          []saveDataFile         `json:"data,omitempty"`
+	UI            []saveUIComponent      `json:"ui,omitempty"`
+	FunctionFiles []saveFunctionFile     `json:"functionFiles,omitempty"`
+	PythonWheels  []pythonpackages.Wheel `json:"pythonWheels,omitempty"`
+}
+
+type saveFunctionFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
 }
 
 // uiComponentNamePattern mirrors manifest.schema.json's tool.ui.component
@@ -138,6 +148,39 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	declaredPython := map[string]bool{}
+	for _, fn := range app.Functions {
+		if fn.Runtime == "python" {
+			declaredPython[fn.Entry] = true
+		}
+	}
+	submitted := map[string]bool{}
+	for _, file := range req.FunctionFiles {
+		if !fs.ValidPath(file.Path) || strings.Contains(file.Path, "\\") || !declaredPython[file.Path] || submitted[file.Path] {
+			writeError(w, http.StatusBadRequest, "invalid_function_file", "functionFiles must contain unique paths declared by Python functions")
+			return
+		}
+		if len(file.Content) > 1<<20 {
+			writeError(w, http.StatusRequestEntityTooLarge, "function_too_large", "Python source exceeds the 1 MiB limit")
+			return
+		}
+		submitted[file.Path] = true
+	}
+	for path := range declaredPython {
+		if !submitted[path] {
+			writeError(w, http.StatusUnprocessableEntity, "missing_function_file", "no Python source submitted for "+path)
+			return
+		}
+	}
+
+	var requirements []string
+	if app.Python != nil {
+		requirements = app.Python.Packages
+	}
+	if err := pythonpackages.Validate(req.PythonWheels, requirements); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_python_packages", err.Error())
+		return
+	}
 	if err := writeAppBundle(s.catalogDir, id, req); err != nil {
 		writeError(w, http.StatusInternalServerError, "save_failed", err.Error())
 		return
@@ -147,7 +190,8 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeAppBundle stages manifest.json, one skills/<name>/SKILL.md per skill,
-// one data/<entity>.json per data entry, and one ui/<name>.html (plus, when
+// declared Python function sources, one data/<entity>.json per data entry,
+// and one ui/<name>.html (plus, when
 // submitted, its ui/components/<name>.tsx source) per built MCP Apps
 // component in a fresh temp directory inside catalogDir (so the final
 // swap is a same-filesystem rename), then swaps it in for catalogDir/<id>.
@@ -160,6 +204,17 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 		return fmt.Errorf("stage temp dir: %w", err)
 	}
 	defer os.RemoveAll(stagingDir) // no-op once successfully renamed into place
+	app, errs := validate.Manifest(req.Manifest)
+	if len(errs) > 0 {
+		return fmt.Errorf("invalid manifest")
+	}
+	var requirements []string
+	if app.Python != nil {
+		requirements = app.Python.Packages
+	}
+	if err := pythonpackages.Install(stagingDir, req.PythonWheels, requirements); err != nil {
+		return err
+	}
 
 	manifestOut, err := reindentJSON(req.Manifest)
 	if err != nil {
@@ -198,6 +253,15 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 			if err := os.WriteFile(filepath.Join(dataDir, d.Entity+".json"), rowsOut, 0o644); err != nil {
 				return fmt.Errorf("write seed data for %q: %w", d.Entity, err)
 			}
+		}
+	}
+	for _, file := range req.FunctionFiles {
+		path := filepath.Join(stagingDir, filepath.FromSlash(file.Path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, []byte(file.Content), 0o644); err != nil {
+			return err
 		}
 	}
 

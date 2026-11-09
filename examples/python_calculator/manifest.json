@@ -1,0 +1,36 @@
+{
+  "app": {
+    "id": "python_calculator",
+    "name": "Python Calculator",
+    "description": "Calculate totals using a Python function executed as WebAssembly.",
+    "emoji": "🧮",
+    "version": 1
+  },
+  "entities": [{
+    "id": "ent_calculation",
+    "name": "calculation",
+    "fields": [
+      { "id": "fld_label", "name": "label", "type": "text" },
+      { "id": "fld_total", "name": "total", "type": "real" }
+    ]
+  }],
+  "functions": [{
+    "id": "fn_total",
+    "name": "total",
+    "runtime": "python",
+    "entry": "functions/total.py",
+    "handler": "calculate_total",
+    "capabilities": {}
+  }],
+  "tools": [{
+    "id": "tool_total",
+    "name": "calculate_total",
+    "description": "Calculate a total price and optional percentage discount using Python.",
+    "function": "fn_total",
+    "params": [
+      { "id": "p_price", "name": "price", "type": "real", "required": true, "min": 0 },
+      { "id": "p_quantity", "name": "quantity", "type": "integer", "required": true, "min": 1 },
+      { "id": "p_discount", "name": "discount_percent", "type": "real", "min": 0, "max": 100 }
+    ]
+  }]
+}

@@ -2,6 +2,7 @@ package validate
 
 import (
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"pocketknife/schema"
@@ -73,6 +74,19 @@ func semantic(app *schema.App) Errors {
 			errs = append(errs, Error{fpath + "/name", "duplicate_name", fmt.Sprintf("function name %q is not unique", fn.Name)})
 		}
 		fnNames[fn.Name] = true
+		if !fs.ValidPath(fn.Entry) || strings.Contains(fn.Entry, "\\") {
+			errs = append(errs, Error{fpath + "/entry", "invalid_entry", "function entry must be a relative path within the app"})
+		}
+		if fn.Runtime == "python" {
+			if !strings.HasPrefix(fn.Entry, "functions/") || !strings.HasSuffix(fn.Entry, ".py") {
+				errs = append(errs, Error{fpath + "/entry", "invalid_entry", "Python entry must be a functions/*.py path"})
+			}
+			if c := fn.Capabilities; c != nil && (len(c.Data) > 0 || c.Model) {
+				errs = append(errs, Error{fpath + "/capabilities", "unsupported_python_capability", "Python functions support network grants; data and model bridges are not implemented"})
+			}
+		} else if fn.Handler != "" {
+			errs = append(errs, Error{fpath + "/handler", "unexpected_field", "handler is only supported for Python functions"})
+		}
 
 		errs = append(errs, validateCapabilities(fpath+"/capabilities", app, fn)...)
 	}
@@ -119,6 +133,15 @@ func validateTool(path string, app *schema.App, tool *schema.Tool) Errors {
 		errs = append(errs, validateField(ppath, app, nil, p)...)
 	}
 
+	if tool.Function != "" {
+		if app.FunctionByID(tool.Function) == nil {
+			errs = append(errs, Error{path + "/function", "unknown_function", fmt.Sprintf("no function with id %q", tool.Function)})
+		}
+		if len(tool.Steps) > 0 {
+			errs = append(errs, Error{path, "conflicting_implementation", "a tool must declare either steps or function"})
+		}
+		return errs
+	}
 	if len(tool.Steps) == 0 {
 		errs = append(errs, Error{path + "/steps", "empty_steps", fmt.Sprintf("tool %q must declare at least one step", tool.Name)})
 	}

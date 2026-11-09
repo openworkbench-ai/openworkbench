@@ -1,0 +1,28 @@
+{
+  "app": {"id": "kleinanzeigen_search", "name": "Kleinanzeigen Search", "description": "Search Kleinanzeigen with a Python tool.", "version": 1},
+  "entities": [{
+    "id": "ent_listing", "name": "listing",
+    "fields": [
+      {"id": "fld_title", "name": "title", "type": "text", "required": true},
+      {"id": "fld_url", "name": "url", "type": "text", "required": true},
+      {"id": "fld_price", "name": "price", "type": "text"}
+    ]
+  }],
+  "python": {"packages": ["tzdata==2026.6"]},
+  "functions": [{
+    "id": "fn_search", "name": "search", "runtime": "python", "entry": "functions/search.py", "handler": "search",
+    "timeoutSeconds": 60,
+    "capabilities": {"network": ["www.kleinanzeigen.de"]}
+  }],
+  "tools": [{
+    "id": "tool_search", "name": "search", "description": "Search Kleinanzeigen listings, optionally by category and page.",
+    "function": "fn_search",
+    "params": [
+      {"id": "p_query", "name": "query", "type": "text", "required": true},
+      {"id": "p_category", "name": "category", "type": "text"},
+      {"id": "p_page", "name": "page", "type": "integer", "min": 1},
+      {"id": "p_pages", "name": "pages", "type": "integer", "min": 1, "max": 3},
+      {"id": "p_timeout", "name": "timeout", "type": "real", "min": 1, "max": 20}
+    ]
+  }]
+}

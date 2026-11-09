@@ -1,4 +1,22 @@
-# Phase 4 — what's built but not yet wired
+# Phase 4 — function execution wiring
+
+**Current status:** function-backed MCP tools are wired through
+`functions.Executor`. The server owns the sandbox lifecycle; tool handlers
+validate arguments, resolve function entries within the app, invoke the
+appropriate Wasm runtime, and translate results/errors to MCP. Python source
+files are included in app save/install bundles. See
+[Python function tools](python-tools.md) for current setup, format and limits.
+
+There is no standalone HTTP function-invocation endpoint. The model broker
+defaults to unconfigured, and the consent UI remains deferred. Python functions
+support installed packages and capability-checked HTTPS requests, with read-only
+standard-library/package mounts. Python data/model bridges remain deferred.
+
+## Historical implementation notes
+
+The original gap list below records the state before MCP function wiring.
+Items about missing MCP execution and sandbox lifecycle are now resolved;
+the public execution surface is MCP rather than the proposed HTTP endpoint.
 
 **Status as of commit `4eb111c` (Add Phase 4 sandboxed functions).**
 

@@ -19,7 +19,7 @@ import (
 // manifest change — storage is keyed by stable id, and the whole point of
 // id-keyed storage is that renaming moves no data and needs no migration),
 // entity Operations (an API-surface restriction, not a schema fact),
-// Frontend/Functions (UI/capability concerns, not row storage), and a
+// Frontend/Functions/Python (UI/capability/package concerns, not row storage), and a
 // field's Default value (materialize never emits a SQL DEFAULT clause at
 // all — defaults are applied at the domain layer, not the database schema).
 //

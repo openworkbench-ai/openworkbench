@@ -74,6 +74,10 @@ volumes:
 
 ## Apps and capabilities
 
+Catalog apps can also expose Python functions as agent tools, executed as
+WebAssembly inside the Go engine. See [Python function tools](docs/python-tools.md)
+for the manifest format, setup, limits and a complete example.
+
 The agent gains capabilities from **apps** — self-contained directories under `apps/<app-name>/` with a manifest:
 
 ```json

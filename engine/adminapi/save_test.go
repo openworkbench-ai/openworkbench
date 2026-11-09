@@ -58,6 +58,32 @@ func TestSaveWritesManifestSkillsAndDataThenInstalls(t *testing.T) {
 	}
 }
 
+func TestSaveRequiresDeclaredPythonSources(t *testing.T) {
+	h, _, _ := newTestServer(t)
+	var manifest map[string]any
+	json.Unmarshal([]byte(todoManifest), &manifest)
+	manifest["functions"] = []any{map[string]any{"id": "fn_sum", "name": "sum", "runtime": "python", "entry": "functions/sum.py", "capabilities": map[string]any{}}}
+	for _, tt := range []struct {
+		name   string
+		files  []map[string]string
+		status int
+	}{
+		{"missing", nil, 422},
+		{"undeclared", []map[string]string{{"path": "functions/other.py", "content": "pass"}}, 400},
+		{"traversal", []map[string]string{{"path": "../escape.py", "content": "pass"}}, 400},
+		{"duplicate", []map[string]string{{"path": "functions/sum.py", "content": "pass"}, {"path": "functions/sum.py", "content": "pass"}}, 400},
+		{"valid", []map[string]string{{"path": "functions/sum.py", "content": "def main(): return 1"}}, 200},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]any{"manifest": manifest, "functionFiles": tt.files})
+			res := doRequestWithBody(t, h, "PUT", "/admin/apps/todo", string(body))
+			if res.Code != tt.status {
+				t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
 func TestSaveWithoutSkillsOrDataCreatesNoExtraDirs(t *testing.T) {
 	h, catalogDir, _ := newTestServer(t)
 

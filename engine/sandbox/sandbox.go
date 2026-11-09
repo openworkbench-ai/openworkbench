@@ -6,12 +6,13 @@
 // state, behind a fixed, capability-checked host ABI that is the only way out
 // of the WebAssembly module wazero runs it in.
 //
-// Status: implemented and tested in isolation; not yet invoked by any
-// HTTP or MCP entry point in this binary. See docs/phase-4-wiring.md.
+// Function-backed MCP tools invoke this boundary through functions.Executor.
+// Python source uses the separate WASI CPython runtime in python.go.
 package sandbox
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"os"
@@ -147,6 +148,23 @@ func (sb *Sandbox) Compile(ctx context.Context, path string) (wazero.CompiledMod
 		return existing, nil
 	}
 	sb.compiled[abs] = cm
+	return cm, nil
+}
+
+// CompileBytes caches by content, allowing a redeployed module at the same
+// catalog path to take effect immediately without granting filesystem access.
+func (sb *Sandbox) CompileBytes(ctx context.Context, bin []byte) (wazero.CompiledModule, error) {
+	key := fmt.Sprintf("sha256:%x", sha256.Sum256(bin))
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	if cm, ok := sb.compiled[key]; ok {
+		return cm, nil
+	}
+	cm, err := sb.rt.CompileModule(ctx, bin)
+	if err != nil {
+		return nil, err
+	}
+	sb.compiled[key] = cm
 	return cm, nil
 }
 

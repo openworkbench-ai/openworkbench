@@ -17,6 +17,9 @@ type rawManifest struct {
 	Frontend  *rawFrontend  `json:"frontend"`
 	Functions []rawFunction `json:"functions"`
 	Tools     []rawTool     `json:"tools"`
+	Python    *struct {
+		Packages []string `json:"packages"`
+	} `json:"python"`
 }
 
 type rawApp struct {
@@ -41,10 +44,13 @@ type rawEntity struct {
 }
 
 type rawFunction struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Entry        string          `json:"entry"`
-	Capabilities rawCapabilities `json:"capabilities"`
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Entry          string          `json:"entry"`
+	Runtime        string          `json:"runtime"`
+	Handler        string          `json:"handler"`
+	TimeoutSeconds int             `json:"timeoutSeconds"`
+	Capabilities   rawCapabilities `json:"capabilities"`
 }
 
 type rawCapabilities struct {
@@ -78,6 +84,7 @@ type rawTool struct {
 	Description string        `json:"description"`
 	Params      []rawField    `json:"params"`
 	Steps       []rawToolStep `json:"steps"`
+	Function    string        `json:"function"`
 	UI          *rawToolUI    `json:"ui"`
 }
 
@@ -144,15 +151,27 @@ func Parse(data []byte) (*App, error) {
 		app.Frontend = &Frontend{Dist: raw.Frontend.Dist, Entry: entry}
 	}
 
+	if raw.Python != nil {
+		app.Python = &PythonConfig{Packages: raw.Python.Packages}
+	}
 	for _, rf := range raw.Functions {
 		fn := &Function{
-			ID:    rf.ID,
-			Name:  rf.Name,
-			Entry: rf.Entry,
+			ID:             rf.ID,
+			Name:           rf.Name,
+			Entry:          rf.Entry,
+			Runtime:        rf.Runtime,
+			Handler:        rf.Handler,
+			TimeoutSeconds: rf.TimeoutSeconds,
 			Capabilities: &Capabilities{
 				Network: rf.Capabilities.Network,
 				Model:   rf.Capabilities.Model,
 			},
+		}
+		if fn.Runtime == "" {
+			fn.Runtime = "wasm"
+		}
+		if fn.Runtime == "python" && fn.Handler == "" {
+			fn.Handler = "main"
 		}
 		for _, rd := range rf.Capabilities.Data {
 			ds := DataScope{Entity: rd.Entity}
@@ -165,7 +184,7 @@ func Parse(data []byte) (*App, error) {
 	}
 
 	for _, rt := range raw.Tools {
-		tool := &Tool{ID: rt.ID, Name: rt.Name, Description: rt.Description}
+		tool := &Tool{ID: rt.ID, Name: rt.Name, Description: rt.Description, Function: rt.Function}
 		if rt.UI != nil {
 			tool.UI = &ToolUI{Component: rt.UI.Component}
 		}

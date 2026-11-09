@@ -11,12 +11,17 @@ description: The Open Workbench manifest.json specification — app metadata, en
 {
   "app": { "id": "todo", "name": "Todo", "description": "...", "emoji": "✅", "color": "#d0ab25", "version": 1 },
   "entities": [ ... ],
+  "functions": [ ... ],
   "tools": [ ... ]
 }
 ```
 
 - `app`: `id`, `name`, `version` required; `description`, `emoji`,
   `color` optional. `version` is an integer starting at `1`.
+- `functions`: optional; Python source and handler declarations used by
+  function-backed tools. See the `tools` skill for the full format and limits.
+- `python`: optional `{"packages": ["package==version", "other>=1"]}` dependency
+  declaration. The builder resolves and bundles packages for use inside Wasm.
 - `entities`: **required, at least one entry.** There is no such thing as
   a catalog app with zero entities. (A pure skill/instructions bundle
   with no data model is a different, simpler kind of thing outside this

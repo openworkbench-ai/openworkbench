@@ -35,6 +35,7 @@ export interface EngineTool {
   name: string;
   description?: string;
   params?: EngineToolParam[];
+  function?: string;
   /** Set when this tool's result renders via ui/components/<component>.tsx. */
   ui?: { component: string };
 }

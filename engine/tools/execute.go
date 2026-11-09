@@ -45,13 +45,16 @@ func Execute(ctx context.Context, reg *registry.Registry, appID, toolID string, 
 	if tool == nil {
 		return nil, &domain.OpError{Kind: domain.ErrToolNotFound, Message: "no tool " + toolID + " in app " + appID}
 	}
+	if tool.Function != "" {
+		return nil, &domain.OpError{Kind: domain.ErrInternal, Message: "function-backed tools require the function executor"}
+	}
 
 	tx, err := ra.Store.BeginTx(ctx)
 	if err != nil {
 		return nil, &domain.OpError{Kind: domain.ErrInternal, Message: err.Error()}
 	}
 
-	paramValues, issues := resolveParams(ra.Schema, tx, tool, params)
+	paramValues, issues := ResolveParams(ra.Schema, tx, tool, params)
 	if len(issues) > 0 {
 		tx.Rollback()
 		return nil, &domain.OpError{Kind: domain.ErrValidation, Message: "tool params failed validation", Issues: issues}
@@ -135,12 +138,12 @@ func runStep(tx *store.Tx, ra *registry.RegisteredApp, ent *schema.Entity, step 
 	}
 }
 
-// resolveParams validates the caller-provided params against tool's declared
+// ResolveParams validates the caller-provided params against tool's declared
 // parameter list, reusing domain.CoerceFieldValue/DefaultStoreValue exactly —
 // a tool param is declared with the same shape as an entity field, so the
 // same coercion, default and (for a reference-typed param) existence-check
 // rules apply unchanged.
-func resolveParams(app *schema.App, rs domain.RowStore, tool *schema.Tool, provided map[string]json.RawMessage) (map[string]any, []domain.FieldError) {
+func ResolveParams(app *schema.App, rs domain.RowStore, tool *schema.Tool, provided map[string]json.RawMessage) (map[string]any, []domain.FieldError) {
 	var issues []domain.FieldError
 	for name := range provided {
 		if tool.Param(name) == nil {

@@ -19,6 +19,9 @@ data.db
 # Engine build output
 /bin/
 /pocketknife
+/engine/.python-wasm/
+**/.python-packages/
+**/.python-packages-*/
 
 # Go test/coverage artifacts
 *.out

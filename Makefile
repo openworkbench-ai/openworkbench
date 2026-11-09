@@ -10,17 +10,20 @@ DATA ?= data
 
 ENGINE_DIR ?= engine
 
-.PHONY: all build run test vet fmt clean tidy
+.PHONY: all build run test vet fmt clean tidy python-wasm
 
 all: build
 
 build:
 	cd $(ENGINE_DIR) && $(GO) build -o ../bin/pocketknife ./cmd/pocketknife
 
-run:
+python-wasm:
+	sh scripts/setup-python-wasm.sh
+
+run: python-wasm
 	cd $(ENGINE_DIR) && $(GO) run ./cmd/pocketknife -addr $(ADDR) -catalog ../$(CATALOG) -data ../$(DATA)
 
-test:
+test: python-wasm
 	cd $(ENGINE_DIR) && $(GO) test ./...
 
 vet:

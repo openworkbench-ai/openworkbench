@@ -107,7 +107,7 @@ func (sb *Sandbox) Invoke(ctx context.Context, cm wazero.CompiledModule, fn *sch
 	}
 	ctx = context.WithValue(ctx, invocationContextKey{}, inv)
 
-	callCtx, cancel := context.WithTimeout(ctx, sb.opts.Timeout)
+	callCtx, cancel := context.WithTimeout(ctx, invocationTimeout(sb.opts.Timeout, fn))
 	defer cancel()
 
 	// An anonymous name (WithName("")) lets the same CompiledModule be
@@ -132,6 +132,9 @@ func (sb *Sandbox) Invoke(ctx context.Context, cm wazero.CompiledModule, fn *sch
 	runFn := mod.ExportedFunction("run")
 	if runFn == nil {
 		return nil, fmt.Errorf("sandbox: function %q's module exports no \"run\" function", fn.ID)
+	}
+	if def := runFn.Definition(); len(def.ParamTypes()) != 0 || len(def.ResultTypes()) != 1 || def.ResultTypes()[0] != api.ValueTypeI32 {
+		return nil, fmt.Errorf("sandbox: function %q must export run() -> i32", fn.ID)
 	}
 	res, err := runFn.Call(callCtx)
 	if err != nil {

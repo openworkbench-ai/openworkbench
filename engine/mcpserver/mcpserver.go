@@ -29,6 +29,7 @@ import (
 
 	"pocketknife/domain"
 	"pocketknife/registry"
+	"pocketknife/sandbox"
 	"pocketknife/schema"
 	"pocketknife/tools"
 )
@@ -40,13 +41,22 @@ const uiResourceMIMEType = "text/html;profile=mcp-app"
 // NewServer builds the HTTP handler serving one MCP streamable-HTTP endpoint
 // per app at /mcp/{app_id}, exposing every tool that app's current manifest
 // declares.
-func NewServer(reg *registry.Registry) http.Handler {
+// FunctionExecutor is supplied by the server, which owns the Wasm runtimes.
+type FunctionExecutor interface {
+	Invoke(context.Context, *registry.RegisteredApp, *schema.Function, []byte) (*sandbox.Result, error)
+}
+
+func NewServer(reg *registry.Registry, executors ...FunctionExecutor) http.Handler {
+	var executor FunctionExecutor
+	if len(executors) > 0 {
+		executor = executors[0]
+	}
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		ra, ok := reg.App(r.PathValue("app"))
 		if !ok {
 			return nil
 		}
-		return buildServer(reg, ra)
+		return buildServer(reg, ra, executor)
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
 
 	mux := http.NewServeMux()
@@ -75,7 +85,7 @@ func requireKnownApp(reg *registry.Registry, next http.Handler) http.Handler {
 // migrated/redeployed app's tool set changes the moment the registry's
 // RegisteredApp does, exactly like assets.NewServer resolving the active
 // frontend bundle fresh on every request.
-func buildServer(reg *registry.Registry, ra *registry.RegisteredApp) *mcp.Server {
+func buildServer(reg *registry.Registry, ra *registry.RegisteredApp, executor FunctionExecutor) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    ra.Schema.ID,
 		Version: fmt.Sprintf("%d", ra.Schema.Version),
@@ -94,7 +104,7 @@ func buildServer(reg *registry.Registry, ra *registry.RegisteredApp) *mcp.Server
 			t.Meta = mcp.Meta{"ui": map[string]any{"resourceUri": uiResourceURI(ra.Schema.ID, tool.UI.Component)}}
 			uiComponents[tool.UI.Component] = true
 		}
-		s.AddTool(t, toolHandler(reg, ra.Schema.ID, tool.ID))
+		s.AddTool(t, toolHandler(reg, ra.Schema.ID, tool.ID, executor))
 	}
 
 	// Every declared tool is registered first, so registerGenericCrudTools
@@ -146,11 +156,22 @@ func uiResourceHandler(appDir, component string) mcp.ResourceHandler {
 // failure, a row not found) are reported as CallToolResult.IsError, not as
 // protocol errors, so the calling model sees them as something to retry or
 // explain rather than a transport fault.
-func toolHandler(reg *registry.Registry, appID, toolID string) mcp.ToolHandler {
+func toolHandler(reg *registry.Registry, appID, toolID string, executor FunctionExecutor) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params, errRes := decodeToolArgs(req.Params.Arguments)
 		if errRes != nil {
 			return errRes, nil
+		}
+		ra, ok := reg.App(appID)
+		if !ok {
+			return errorResult("app is not active"), nil
+		}
+		tool := ra.Schema.ToolByID(toolID)
+		if tool == nil {
+			return errorResult("tool no longer exists"), nil
+		}
+		if tool.Function != "" {
+			return executeFunction(ctx, executor, ra, tool, params)
 		}
 
 		result, operr := tools.Execute(ctx, reg, appID, toolID, params)

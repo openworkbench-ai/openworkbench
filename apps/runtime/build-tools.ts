@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { buildAppUI, generateEntityTypes } from "@openworkbench/app-ui-kit/build";
 import { Type } from "typebox";
+import { buildPythonPackages } from "./python-packages.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,9 +37,10 @@ export interface AppBundle {
   manifestRaw: string;
   skills: { name: string; content: string }[];
   data: { entity: string; rows: unknown[] }[];
+  functionFiles: { path: string; content: string }[];
 }
 
-/** Reads `<workspaceRoot>/<id>/{manifest.json, skills/*\/SKILL.md, data/*.json}` off disk. */
+/** Reads a draft's manifest, skills, seed data and declared Python source. */
 export function readAppBundle(workspaceRoot: string, id: string): AppBundle | { error: string } {
   const appDir = join(workspaceRoot, id);
   const manifestPath = join(appDir, "manifest.json");
@@ -47,10 +49,15 @@ export function readAppBundle(workspaceRoot: string, id: string): AppBundle | { 
   }
 
   const manifestRaw = readFileSync(manifestPath, "utf-8");
+  let manifest: { functions?: { runtime?: string; entry?: string }[] };
   try {
-    JSON.parse(manifestRaw);
+    manifest = JSON.parse(manifestRaw);
   } catch (err) {
     return { error: `"${id}/manifest.json" is not valid JSON: ${(err as Error).message}` };
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) ||
+      (manifest.functions !== undefined && !Array.isArray(manifest.functions))) {
+    return { error: "Manifest must be an object with an optional functions array." };
   }
 
   const skills: AppBundle["skills"] = [];
@@ -79,7 +86,30 @@ export function readAppBundle(workspaceRoot: string, id: string): AppBundle | { 
     }
   }
 
-  return { manifestRaw, skills, data };
+  const functionFiles: AppBundle["functionFiles"] = [];
+  const seen = new Set<string>();
+  for (const fn of manifest.functions ?? []) {
+    if (!fn || typeof fn !== "object") return { error: "Each function declaration must be an object." };
+    if (fn.runtime !== "python") continue;
+    const entry = fn.entry;
+    if (typeof entry !== "string" || !entry.startsWith("functions/") || !entry.endsWith(".py") || entry.includes("\\") || entry.split("/").some((part) => !part || part === "." || part === "..")) {
+      return { error: "Python entry must be a relative functions/*.py path." };
+    }
+    if (seen.has(entry)) continue;
+    try {
+      const sourcePath = realpathSync(join(appDir, entry));
+      const inside = relative(realpathSync(appDir), sourcePath);
+      if (isAbsolute(inside) || inside === ".." || inside.startsWith(`..${sep}`)) {
+        return { error: `Python source "${entry}" must stay inside the app directory.` };
+      }
+      if (statSync(sourcePath).size > 1 << 20) return { error: `Python source "${entry}" exceeds the 1 MiB limit.` };
+      functionFiles.push({ path: entry, content: readFileSync(sourcePath, "utf-8") });
+      seen.add(entry);
+    } catch (err) {
+      return { error: `Cannot read Python source "${entry}": ${(err as Error).message}` };
+    }
+  }
+  return { manifestRaw, skills, data, functionFiles };
 }
 
 export interface AppUIComponent {
@@ -200,6 +230,10 @@ async function validateDraft(
   } catch {
     // fall through with valid: false below
   }
+  if (parsed.valid === true) {
+    const packages = await buildPythonPackages(join(workspaceRoot, id));
+    if ("error" in packages) return packages;
+  }
   return { valid: parsed.valid === true, body };
 }
 
@@ -224,6 +258,8 @@ export async function saveAndInstall(
 
   const ui = await buildAppUi(workspaceRoot, id);
   if ("error" in ui) return { ok: false, status: 400, message: `UI build failed: ${ui.error}` };
+  const packages = await buildPythonPackages(join(workspaceRoot, id));
+  if ("error" in packages) return { ok: false, status: 400, message: packages.error };
 
   // The draft lives in the workspace under its own short id; it's installed under
   // `installId` (namespaced per user by the caller), and the engine requires the
@@ -239,6 +275,8 @@ export async function saveAndInstall(
       skills: bundle.skills.length > 0 ? bundle.skills : undefined,
       data: bundle.data.length > 0 ? bundle.data : undefined,
       ui: ui.components.length > 0 ? ui.components : undefined,
+      functionFiles: bundle.functionFiles.length > 0 ? bundle.functionFiles : undefined,
+      pythonWheels: packages.wheels.length > 0 ? packages.wheels : undefined,
     }),
   });
   const saveBody = await saveRes.text();

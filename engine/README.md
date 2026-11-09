@@ -13,10 +13,9 @@ by id and serves it from its registered schema.
 
 Beyond that core, the same binary also: **evolves** an app's schema to a new
 manifest version without losing data (the migration engine), and contains a
-capability-checked WebAssembly **sandbox** for declared server-side functions —
-implemented and tested, but not yet invoked by any HTTP or MCP entry point in
-this binary; see "Sandboxed functions" below for what that means in practice
-today.
+capability-checked WebAssembly **sandbox** for declared server-side functions.
+Tools can reference these functions, including Python source executed inside
+WASI CPython. See [Python function tools](../docs/python-tools.md).
 
 An app can also declare **tools**: named, manifest-defined operations that
 run one or more of its own CRUD calls in sequence, exposed live over MCP at
@@ -214,12 +213,9 @@ millisecond precision and a literal `Z` (e.g. `2026-06-21T15:21:58.940Z`).
 ### Optional: `frontend` and `functions`
 
 Two optional top-level keys extend an app's manifest beyond a bare API.
-**Neither is currently served by anything in the engine** — `frontend` is
-structurally validated and parsed but has no consumer since the frontend
-serving packages were removed pending a redesign (see [Layout](#layout));
-`functions` is fully implemented in `sandbox/` but not yet wired to any HTTP
-or MCP entry point (see "Sandboxed functions" below). Both are documented
-here because the manifest format still declares and validates them.
+`frontend` is structurally validated and parsed but has no serving consumer.
+`functions` declares executable functions; a tool's `function` field exposes
+one over MCP. See [Python function tools](../docs/python-tools.md) for Python.
 
 ```json
 {
@@ -244,8 +240,12 @@ here because the manifest format still declares and validates them.
 - **`frontend`** names a built static bundle. `dist` (required) is the asset
   directory; `entry` (optional, default `index.html`) is the file that would
   be served for the root and for any path that doesn't match a real asset.
-- **`functions`** declares sandboxed server-side functions. `entry` must name an
-  already-built `.wasm` module. `capabilities` is the **closed** set of host
+- **`functions`** declares sandboxed server-side functions. With the default
+  `runtime: "wasm"`, `entry` names an already-built `.wasm` module. With
+  `runtime: "python"`, it names `functions/*.py` source and `handler` names
+  the callable (default `main`). Python supports exact-hostname network grants
+  and top-level `python.packages` dependencies. Data/model bridges are deferred.
+  For precompiled Wasm, `capabilities` is the **closed** set of host
   power the sandbox grants — and the manifest only ever *declares* it; the
   sandbox is what enforces it:
   - `data` — per-entity operation grants (referenced by the entity's stable id),
@@ -258,8 +258,9 @@ here because the manifest format still declares and validates them.
 ### Optional: `tools`
 
 A third optional top-level key, `tools`, declares named operations exposed to
-MCP clients at `/mcp/{app_id}` (see "MCP tools" below). Unlike `functions`,
-a tool is not code: it's an ordered, non-branching sequence of CRUD calls
+MCP clients at `/mcp/{app_id}` (see "MCP tools" below). A tool declares either
+`function` (a function's stable ID) or `steps`. The latter is an ordered,
+non-branching sequence of CRUD calls
 into the app's *own* entities, so it needs no sandbox — it can't do anything
 a direct call against `/apps/{app}/{entity}` couldn't already do; it only
 names and sequences those calls, atomically, in one transaction.
@@ -449,15 +450,13 @@ is how you re-trigger it in dev.
 
 ## Sandboxed functions (`engine/sandbox/`, `engine/broker/`, `engine/consent/`)
 
-**Status: implemented and tested in isolation; not yet wired into any live
-entry point.** Everything below describes what the sandbox *enforces once a
-function is invoked* — but nothing in this binary currently invokes one: no
-HTTP route triggers `sandbox.Invoke`, `broker.New`/`NewHTTPCaller` is never
-constructed from the environment, and no app under `catalog/` declares a
-`functions` block. A future MCP transport (or a dedicated HTTP endpoint) is
-the natural place to wire this in; until then, treat this section as a
-description of a well-tested library, not of a running feature. See
-`docs/phase-4-wiring.md` for the tracked wiring gaps.
+**Status: wired into MCP through function-backed tools.** `functions.Executor`
+owns the shared Wasm runtimes and resolves source/modules within the app's
+directory. Python functions use WASI CPython with a read-only standard library;
+see [Python function tools](../docs/python-tools.md) for setup and limits.
+The following host ABI applies to precompiled Wasm functions. The server uses
+an unconfigured model broker; model calls report a backend error until a
+provider is supplied. No separate HTTP function-invocation endpoint is exposed.
 
 A function's manifest entry only *declares* capabilities; `sandbox/` is the real
 boundary that *enforces* them. Each function body is treated as adversarial: it

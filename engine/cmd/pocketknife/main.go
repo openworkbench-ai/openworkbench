@@ -18,7 +18,9 @@ import (
 
 	"pocketknife/adminapi"
 	"pocketknife/api"
+	"pocketknife/broker"
 	"pocketknife/cors"
+	"pocketknife/functions"
 	"pocketknife/mcpserver"
 	"pocketknife/migrate"
 	"pocketknife/registry"
@@ -72,6 +74,7 @@ func runServe(args []string) {
 	dataDir := fs.String("data", "data", "directory containing <app_id>/data.db")
 	addr := fs.String("addr", "127.0.0.1:8080", "address to listen on (127.0.0.1-only by default: the Workbench v0.1 runtime assumes a trusted local machine; pass e.g. -addr :8080 to bind every interface, an explicit choice to expose it to a network)")
 	corsEnabled := fs.Bool("cors", false, "allow cross-origin requests (for a frontend served by a separate dev server)")
+	pythonDir := fs.String("python-dir", defaultPythonDir(), "WASI CPython distribution directory (python.wasm and lib/)")
 	_ = fs.Parse(args)
 
 	reg, results, err := registry.Load(*catalogDir, *dataDir)
@@ -122,9 +125,15 @@ func runServe(args []string) {
 		log.Printf("warning: no apps registered; serving an empty runtime")
 	}
 
+	executor, err := functions.New(*pythonDir, broker.New(nil))
+	if err != nil {
+		log.Fatalf("function executor: %v", err)
+	}
+	defer executor.Close(context.Background())
+
 	mux := http.NewServeMux()
 	mux.Handle("/apps/", api.NewServer(reg))
-	mux.Handle("/mcp/", mcpserver.NewServer(reg))
+	mux.Handle("/mcp/", mcpserver.NewServer(reg, executor))
 	mux.Handle("/validate", validateapi.NewServer())
 	mux.Handle("/admin/", adminapi.NewServer(reg, *catalogDir, *dataDir))
 
@@ -133,6 +142,16 @@ func runServe(args []string) {
 	if err := http.ListenAndServe(*addr, handler); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func defaultPythonDir() string {
+	if dir := os.Getenv("POCKETKNIFE_PYTHON_DIR"); dir != "" {
+		return dir
+	}
+	if _, err := os.Stat(".python-wasm/python.wasm"); err == nil {
+		return ".python-wasm"
+	}
+	return "engine/.python-wasm"
 }
 
 // recoverMiddleware catches a panic from any handler and turns it into a

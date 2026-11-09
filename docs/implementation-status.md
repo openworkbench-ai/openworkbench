@@ -111,15 +111,16 @@ existing `data.db`). Rows can reference each other via a `"$key"` label
 resolved to a real generated id; all files insert in one transaction.
 
 **Sandboxed functions** (`engine/sandbox/`, `engine/broker/`,
-`engine/consent/`) — **implemented and tested in isolation, not wired to any
-entry point.** The manifest's optional `functions` key would declare a
+`engine/consent/`) — **exposed through function-backed MCP tools.** The
+manifest's optional `functions` key declares a
 WebAssembly module and the capabilities (`data`, `network` allow-list,
 `model`) it's granted; `sandbox/` runs it under wazero with no filesystem, no
 env, no raw network, behind a fixed capability-checked host ABI, with
 per-invocation memory/timeout/byte-cap limits. `broker/` is the only path to
-a model provider (token never reaches guest code). None of this is invoked by
-the current server — no HTTP/MCP route triggers `sandbox.Invoke`, and no
-catalog app declares `functions`.
+a model provider (token never reaches guest code). `functions.Executor` now
+connects this to MCP. Python functions run inside WASI CPython with a read-only
+standard library, installed package dependencies and exact-hostname HTTPS grants.
+See [Python function tools](python-tools.md).
 
 **Also deferred**: `frontend` is a valid manifest key (a pre-built static
 bundle to serve) but nothing serves it — the frontend-serving packages were
@@ -297,8 +298,8 @@ model id to a callable model for the agent session. Default model:
   through the agent's tools.
 - **No auth anywhere** — engine, runtime server, and web app all assume a
   trusted local machine.
-- **Sandboxed functions** (`engine/sandbox/`) are unreachable from any live
-  route — see above.
+- **Python data/model bridges and native extension builds** are not implemented.
+  Portable Python packages and capability-checked HTTPS calls are supported.
 - **File-based `apps/*/app.json` capability convention** (skills/MCP servers
   outside the engine) exists in code but no app currently uses it — only the
   engine-backed catalog path is populated today.

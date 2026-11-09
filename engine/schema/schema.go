@@ -68,9 +68,15 @@ type App struct {
 	// Functions are this app's sandboxed server-side functions, or nil if the
 	// app declares none.
 	Functions []*Function
+	// Python declares this app's Python package dependencies.
+	Python *PythonConfig
 	// Tools are this app's declarative, manifest-defined MCP tools, or nil if
 	// the app declares none.
 	Tools []*Tool
+}
+
+type PythonConfig struct {
+	Packages []string
 }
 
 // Frontend names a pre-built static asset bundle for this manifest version.
@@ -85,16 +91,20 @@ type Frontend struct {
 	Entry string
 }
 
-// Function is one declared sandboxed server-side function: a pre-compiled
-// WebAssembly module plus the capabilities the sandbox grants it. Pocketknife
-// never compiles functions on-box — Entry must already name a built .wasm
-// module, relative to the app's directory, mirroring how Frontend.Dist must
-// already be a built static bundle. The manifest only ever declares
-// capabilities; the sandbox is what actually enforces them.
+// Function is one declared sandboxed server-side function. The default runtime
+// uses a prebuilt .wasm module and the capability-checked host ABI. The Python
+// runtime interprets .py source inside WASI CPython. Entry is relative to the
+// app directory; the sandbox enforces the execution boundary in either case.
 type Function struct {
-	ID           string
-	Name         string
-	Entry        string
+	ID    string
+	Name  string
+	Entry string
+	// Runtime defaults to "wasm". "python" runs Entry's source in WASI CPython.
+	Runtime string
+	// TimeoutSeconds overrides the default invocation budget, up to 120 seconds.
+	TimeoutSeconds int
+	// Handler is the Python callable to invoke (defaults to "main").
+	Handler      string
 	Capabilities *Capabilities
 }
 
@@ -155,9 +165,10 @@ func (c *Capabilities) AllowsDomain(host string) bool {
 	return false
 }
 
-// Tool is a named, manifest-declared MCP tool: an ordered, non-branching
-// sequence of CRUD calls into this app's own entities, run atomically as one
-// transaction (see the tools package). A tool has no separate execution
+// Tool is a named, manifest-declared MCP tool. It either references a Function
+// or declares an ordered, non-branching sequence of CRUD calls into this app's
+// own entities, run atomically as one transaction (see the tools package).
+// A CRUD tool has no separate execution
 // boundary the way a Function does — it can only call domain's existing
 // Create/Read/Update/Delete on entities and operations the manifest already
 // allows, so it can't do anything a direct request against
@@ -173,6 +184,8 @@ type Tool struct {
 	// an MCP client gets a real JSON Schema for its call arguments.
 	Params []*Field
 	Steps  []*ToolStep
+	// Function references a declared function's stable ID instead of CRUD steps.
+	Function string
 	// UI, if set, renders this tool's result via an agent-authored React
 	// component (served as an MCP Apps ui:// resource) instead of raw JSON.
 	UI *ToolUI

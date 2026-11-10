@@ -125,6 +125,18 @@ func (r *Registry) App(id string) (*RegisteredApp, bool) {
 	return a, ok
 }
 
+// LoadedApp is the admin-only lookup, including disabled apps. Serving paths
+// must continue to use App so that disabling an app remains effective.
+func (r *Registry) LoadedApp(id string) (*RegisteredApp, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if a, ok := r.apps[id]; ok {
+		return a, true
+	}
+	a, ok := r.inactive[id]
+	return a, ok
+}
+
 // Apps returns all active apps, sorted by ID for stable output.
 func (r *Registry) Apps() []*RegisteredApp {
 	r.mu.RLock()

@@ -1,6 +1,16 @@
 # openworkbench
 
-A minimal agent built with Anthropic's [Pi SDK](https://pi.dev/docs/latest/sdk), running against OpenRouter as the model provider.
+An app workspace for people and agents. Build and edit bounded applications with
+real source files, an app-scoped coding partner, and control over what goes live.
+The agent runtime uses [Pi SDK](https://pi.dev/docs/latest/sdk) with OpenRouter as
+the model provider.
+
+Apps now open in a unified workspace: a source-derived overview, Monaco editor,
+Markdown skills, React previews, Python functions, source diffs, live data,
+reviewed activation, and revision history. Manual edits and the app-scoped coding
+partner share a durable draft. There is no separate builder page. See
+[App workspace](docs/app-workspace.md) for architecture, persistence, boundaries,
+and verification details.
 
 ## Setup
 

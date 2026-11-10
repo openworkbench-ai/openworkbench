@@ -22,6 +22,9 @@ export interface BuildAppUIOptions {
   appDir: string
   /** Seeds --app-accent from the app's own manifest.app.color, if set. */
   accentColor?: string
+  /** A standalone, network-isolated workbench preview rather than an MCP host connection. */
+  preview?: boolean
+  component?: string
 }
 
 export interface BuildAppUIComponent {
@@ -46,7 +49,7 @@ export async function buildAppUI(options: BuildAppUIOptions): Promise<BuildAppUI
   const componentsDir = path.join(options.appDir, "ui", "components")
   let files: string[]
   try {
-    files = readdirSync(componentsDir).filter((f) => f.endsWith(".tsx"))
+    files = readdirSync(componentsDir).filter((f) => f.endsWith(".tsx") && (!options.component || f === `${options.component}.tsx`))
   } catch {
     return []
   }
@@ -92,9 +95,11 @@ export async function buildAppUI(options: BuildAppUIOptions): Promise<BuildAppUI
         path.join(entriesDir, `${component}.tsx`),
         [
           `import "./entry.css"`,
-          `import { mountAppComponent } from ${importSpecifier(shellPath)}`,
+          options.preview ? `import { createRoot } from "react-dom/client"` : `import { mountAppComponent } from ${importSpecifier(shellPath)}`,
           `import Component from ${importSpecifier(componentPath)}`,
-          `mountAppComponent(Component, { name: ${JSON.stringify(component)} })`,
+          options.preview
+            ? `const root = createRoot(document.getElementById("root")!); root.render(<Component />); window.addEventListener("message", event => { if (event.source === window.parent && event.data?.type === "workbench:preview-props") root.render(<Component {...event.data.props} />) }); window.parent.postMessage({type:"workbench:preview-ready"}, "*");`
+            : `mountAppComponent(Component, { name: ${JSON.stringify(component)} })`,
           "",
         ].join("\n"),
         "utf-8",

@@ -6,7 +6,9 @@ export interface AppInfo {
   color?: string
   /** Whether this app can be activated/deactivated — only catalog (engine-backed) apps go through that lifecycle. */
   manageable?: boolean
-  status?: "active" | "inactive"
+  status?: "active" | "inactive" | "draft"
+  installed?: boolean
+  changes?: number
 }
 
 export interface ToolParam {

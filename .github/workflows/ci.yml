@@ -40,4 +40,6 @@ jobs:
       - name: Build web
         run: npm run build -w apps/web
       - name: Test runtime
-        run: npm test -w apps/runtime
+        run: |
+          PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium --only-shell
+          npm test -w apps/runtime

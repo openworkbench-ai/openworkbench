@@ -23,7 +23,7 @@ Task-oriented agent tools  the verbs an agent should be able to call
    ↓
 Useful rendered views      which results deserve a real look, not raw JSON
    ↓
-Optional starter data      does a first run benefit from example rows?
+Initial reference/setup data   what data does ongoing use need from the start?
 ```
 
 Work top-down. Don't start from "what fields could this entity have" —
@@ -84,13 +84,21 @@ acknowledgements ("created"), raw ids, internal bookkeeping entities, or
 anything a plain structured result already conveys clearly. Most tools in
 a small app don't need one.
 
-## Seed data should improve first-run experience
+## Seed data supplies useful initial app content
 
-Write `data/<entity>.json` (see the `seed-data` skill) only when starter
-rows genuinely help someone understand or immediately use the app on
-first install — a couple of example tasks in a todo app, a starter
-training plan in a workout app. Don't seed rows just to have something to
-look at; an app with no natural example content is fine with none.
+Write `data/<entity>.json` (see the `seed-data` skill) for reference or
+setup data the app needs for its actual workflows and continued use —
+an exercise library, useful expense categories, or a training plan the
+user supplied. Choose content based on the requested app and known
+domain requirements. Ask when essential user-specific data is missing.
+
+Never create demo/sample records or fictional user activity to explain
+the app or fill its views: no example tasks, fake customers, invented
+transactions, or workout logs. Seeded rows must serve a concrete purpose
+in ongoing use. Leave user-created records empty until users add them,
+and omit seed files when the app has no useful initial content. Don't
+introduce extra entities just to seed them. Seeds run only on first
+install; they cannot backfill an already-installed app.
 
 ## Worked judgment calls
 

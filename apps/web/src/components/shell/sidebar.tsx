@@ -1,79 +1,75 @@
-import { useEffect, useState } from "react"
-import { NavLink } from "react-router-dom"
-import { Hammer, LayoutGrid, LogOut, MessageSquare } from "lucide-react"
+import { useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
+import {
+  LayoutGrid,
+  LogOut,
+  MessageSquare,
+  PanelLeftClose,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { fetchApps, logout, type AuthUser } from "@/lib/api";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 
-import { cn } from "@/lib/utils"
-import { fetchApps, logout, type AuthUser } from "@/lib/api"
-import { ThemeToggle } from "@/components/shell/theme-toggle"
-
-const destinations = [
-  { to: "/", label: "Chat", icon: MessageSquare },
-  { to: "/apps", label: "Apps", icon: LayoutGrid },
-  { to: "/build", label: "Build", icon: Hammer },
-]
-
-/** Left rail: brand mark, the screens this build ships, and app count. */
-function Sidebar({ user }: { user: AuthUser | null }) {
-  const [appCount, setAppCount] = useState<number | null>(null)
-
+export function Sidebar({ user }: { user: AuthUser | null }) {
+  const [appCount, setAppCount] = useState(0);
   useEffect(() => {
-    fetchApps()
-      .then(({ apps }) => setAppCount(apps.length))
-      .catch(() => {})
-  }, [])
-
+    const load = () => {
+      void fetchApps()
+        .then(({ apps }) => setAppCount(apps.length))
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener("owb:apps-changed", load);
+    return () => window.removeEventListener("owb:apps-changed", load);
+  }, []);
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card px-3 py-4">
-      <div className="flex items-center gap-2.5 px-2 pb-6">
-        <span className="grid size-7 shrink-0 place-items-center text-lg">🧰</span>
-        <span className="font-display text-base leading-none font-semibold tracking-tight">Open Workbench</span>
-      </div>
-
-      <nav className="flex flex-col gap-0.5">
-        {destinations.map((destination) => (
+    <aside className="workbench-rail">
+      <NavLink
+        to="/apps"
+        className="rail-brand"
+        aria-label="Open Workbench"
+        title="Open Workbench"
+      >
+        <span>o</span>
+        <i />
+      </NavLink>
+      <div className="rail-divider" />
+      <nav aria-label="Main navigation">
+        {[
+          { to: "/", label: "Chat", icon: MessageSquare },
+          { to: "/apps", label: "Apps", icon: LayoutGrid },
+        ].map((item) => (
           <NavLink
-            key={destination.to}
-            to={destination.to}
-            end={destination.to === "/"}
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
             className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-foreground/[0.07] text-foreground"
-                  : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
-              )
+              cn("rail-destination", isActive && "active")
             }
           >
-            <destination.icon className="size-4" />
-            {destination.label}
+            <item.icon size={19} strokeWidth={1.6} />
+            <span>{item.label}</span>
+            {item.label === "Apps" && appCount > 0 && <i>{appCount}</i>}
           </NavLink>
         ))}
       </nav>
-
-      <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border px-2 pt-3">
-        {user ? (
-          <span className="w-full truncate pb-1 text-xs text-muted-foreground" title={user.email}>
-            {user.email}
-          </span>
-        ) : null}
-        <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted-foreground">
-          {appCount == null ? "…" : `${appCount} app${appCount === 1 ? "" : "s"} installed`}
+      <div className="rail-footer">
+        <span className="rail-flower" title="A little space to make things">
+          ✻
         </span>
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            aria-label="Sign out"
-            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-            onClick={() => void logout()}
-            title="Sign out"
-            type="button"
-          >
-            <LogOut className="size-4" />
-          </button>
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
+        <button
+          aria-label="Sign out"
+          title={`Sign out ${user?.email ?? ""}`}
+          onClick={() => void logout()}
+        >
+          <LogOut size={16} />
+        </button>
+        <span className="rail-avatar" title={user?.email}>
+          {user?.email.charAt(0).toUpperCase() ?? "U"}
+        </span>
+        <PanelLeftClose size={13} className="rail-bottom-icon" />
       </div>
     </aside>
-  )
+  );
 }
-
-export { Sidebar }

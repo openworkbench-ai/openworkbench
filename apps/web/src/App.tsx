@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react"
-import { Route, Routes } from "react-router-dom"
+import { Navigate, Route, Routes } from "react-router-dom"
 
 import { LoginGate } from "@/components/auth/login-gate"
 import { Sidebar } from "@/components/shell/sidebar"
 import { Toaster } from "@/components/ui/toast"
 import { AUTH_REQUIRED_EVENT, fetchAuthStatus, type AuthUser, type SignInMethod } from "@/lib/api"
 import { AgentPage } from "@/pages/agent-page"
-import { AppDetailPage } from "@/pages/app-detail-page"
+import { AppWorkspacePage } from "@/pages/app-workspace-page"
 import { AppsPage } from "@/pages/apps-page"
-import { BuildPage } from "@/pages/build-page"
 
 function App() {
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "required">("checking")
@@ -58,8 +57,8 @@ function App() {
         <Routes>
           <Route path="/" element={<AgentPage />} />
           <Route path="/apps" element={<AppsPage />} />
-          <Route path="/apps/:id" element={<AppDetailPage />} />
-          <Route path="/build" element={<BuildPage />} />
+          <Route path="/apps/:id" element={<AppWorkspacePage />} />
+          <Route path="/build" element={<Navigate to="/apps" replace />} />
         </Routes>
       </main>
       <Toaster />

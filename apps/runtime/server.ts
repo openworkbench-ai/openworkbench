@@ -14,6 +14,7 @@ import { createOwnershipStore } from "./ownership-store.js";
 import { createPasswordProvider } from "./password-provider.js";
 import { createUserStore } from "./user-store.js";
 import { createUserRuntimes } from "./user-runtime.js";
+import { createWorkspaceRoutes } from "./workspace-routes.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
@@ -197,6 +198,7 @@ async function main() {
     createBuild: (modelId) => createBuildAgentBackend(ENGINE_URL, modelId ?? DEFAULT_MODEL_ID),
     capabilitiesFor: (userId) => capabilitiesFor(capabilities, visibleAppIds(userId)),
   });
+  const pendingChatRefresh = new Set<string>();
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
@@ -218,10 +220,21 @@ async function main() {
     // would pull the rug out from under an in-flight tool call, and history lives inside the
     // one Pi session being replaced, so a refresh starts a fresh conversation.
     if (!(await runtimes.forUser(userId).refreshChat())) {
+      pendingChatRefresh.add(userId);
       return { ok: false, reason: "the agent is still responding to a previous message" };
     }
+    pendingChatRefresh.delete(userId);
     return { ok: true };
   }
+
+  const workspaces = createWorkspaceRoutes({
+    root: process.env.WORKSPACES_DIR ?? join(dirname(AUTH_DB_PATH), "workspaces"),
+    engineUrl: ENGINE_URL,
+    defaultModel: DEFAULT_MODEL_ID,
+    models: loadCuratedModels,
+    catalogDirFor(userId, id) { const app = appFor(userId, id); return app?.engine ? app.dir : undefined; },
+    async onApplied(userId, id) { ownership.claim(id, userId); await reloadApps(userId); },
+  });
 
   const server = createServer(async (req, res) => {
     if (req.method === "OPTIONS") {
@@ -258,8 +271,15 @@ async function main() {
       ownership.claimExistingOnce(user.id, apps.filter((app) => app.engine).map((app) => basename(app.dir)));
       const runtime = runtimes.forUser(user.id);
 
+      if (await workspaces.handle(req, res, url, user.id)) return;
+
       if (req.method === "GET" && url.pathname === "/api/apps") {
-        sendJson(res, 200, { apps: appListFor(user.id, await fetchAdminStatuses()) });
+        const running = appListFor(user.id, await fetchAdminStatuses());
+        const projects = workspaces.summaries(user.id);
+        sendJson(res, 200, { apps: [
+          ...running.map(app => ({ ...app, installed: true, changes: projects.find(p => p.id === app.id)?.changes ?? 0 })),
+          ...projects.filter(p => !running.some(app => app.id === p.id)).map(p => ({ ...p, manageable: false, status: "draft" })),
+        ] });
         return;
       }
 
@@ -430,6 +450,10 @@ async function main() {
           res.off("close", onClientGone);
           runtime.streaming = false;
           if (!res.writableEnded) res.end();
+          if (pendingChatRefresh.delete(user.id)) {
+            try { await runtime.refreshChat(); }
+            catch (error) { console.error("[agent] deferred app refresh failed:", error instanceof Error ? error.message : String(error)); }
+          }
         }
         return;
       }

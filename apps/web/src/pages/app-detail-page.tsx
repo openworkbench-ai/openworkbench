@@ -49,11 +49,13 @@ function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
     setData(null)
     setError(null)
     load()
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .then((result) => { if (active) setData(result) })
+      .catch((err) => { if (active) setError(err instanceof Error ? err.message : String(err)) })
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
@@ -486,4 +488,4 @@ function AppDetailPage() {
   )
 }
 
-export { AppDetailPage }
+export { AppDetailPage, DataTab }

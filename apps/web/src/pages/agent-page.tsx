@@ -3,6 +3,7 @@ import { Sparkles, Trash2 } from "lucide-react"
 
 import { fetchApps, fetchModels, streamChat, switchModel, type AgentStreamEvent, type AppInfo, type ModelInfo } from "@/lib/api"
 import { usePersistedState } from "@/lib/persisted-state"
+import { groupSegments } from "@/lib/chat-segments"
 import { PageHeader } from "@/components/shell/page-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -159,27 +160,6 @@ function toolCallLabel(toolName: string, args: unknown): string {
 }
 
 type ToolSegment = Extract<Segment, { kind: "tool" }>
-type NonToolSegment = Exclude<Segment, { kind: "tool" }>
-type RenderItem = { kind: "single"; segment: NonToolSegment } | { kind: "tool-group"; items: ToolSegment[] }
-
-/** Collapses runs of consecutive tool calls (e.g. 10 add_exercise calls in a row) into one group. */
-function groupSegments(segments: Segment[]): RenderItem[] {
-  const items: RenderItem[] = []
-  for (const segment of segments) {
-    const last = items[items.length - 1]
-    if (segment.kind === "tool" && last?.kind === "tool-group") {
-      last.items.push(segment)
-      continue
-    }
-    if (segment.kind === "tool") {
-      items.push({ kind: "tool-group", items: [segment] })
-      continue
-    }
-    items.push({ kind: "single", segment })
-  }
-  return items
-}
-
 function toolGroupLabel(items: ToolSegment[]): string {
   const labels = new Set(items.map((s) => toolCallLabel(s.toolName, s.args)))
   if (labels.size === 1) return `${items.length} × ${[...labels][0]}`

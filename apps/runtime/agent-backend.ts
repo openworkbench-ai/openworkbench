@@ -1,19 +1,5 @@
-export type AgentStreamEvent =
-  | { type: "text"; delta: string }
-  | { type: "thinking"; delta: string }
-  | { type: "error"; reason: string }
-  | { type: "tool_start"; toolCallId: string; toolName: string; args: unknown }
-  | {
-      type: "tool_end";
-      toolCallId: string;
-      toolName: string;
-      result: unknown;
-      isError: boolean;
-      /** MCP Apps `_meta.ui.resourceUri`, when this call's tool declared one (see extractUiResource). */
-      resourceUri?: string;
-      /** Which installed app's MCP server resourceUri belongs to -- needed to fetch it. */
-      appId?: string;
-    };
+import type { AgentStreamEvent } from "../../packages/workspace-chat.js";
+export type { AgentStreamEvent } from "../../packages/workspace-chat.js";
 
 /**
  * Pulls the MCP Apps `_meta.ui.resourceUri` (and originating app id) off a

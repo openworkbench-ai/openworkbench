@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { Capabilities } from "../app-loader.js";
 import { createMcpProxyTool } from "../mcp-tools.js";
+import { createWebTools } from "../web-tools.js";
 
 export interface CapabilityProvider {
   resourceLoader: ResourceLoader;
@@ -46,6 +47,6 @@ export async function createCapabilityProvider(
 
   return {
     resourceLoader,
-    tools: mcpProxyTool ? [mcpProxyTool] : [],
+    tools: [...createWebTools(), ...(mcpProxyTool ? [mcpProxyTool] : [])],
   };
 }

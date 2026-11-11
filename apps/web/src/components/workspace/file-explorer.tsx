@@ -204,15 +204,6 @@ export function FileExplorer({
           <p className="explorer-no-results">No matching files.</p>
         )}
       </div>
-      <div className="explorer-bottom">
-        <span className="explorer-bracket">{"{ }"}</span>
-        <strong>A small, powerful structure.</strong>
-        <p>
-          Everything your app can be,
-          <br />
-          right here in its files.
-        </p>
-      </div>
     </aside>
   );
 }

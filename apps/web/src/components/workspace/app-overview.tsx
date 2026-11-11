@@ -1,5 +1,5 @@
+import { useState } from "react";
 import {
-  ArrowDown,
   ArrowRight,
   BookOpen,
   Braces,
@@ -46,6 +46,9 @@ export function AppOverview({
   addFile: (kind?: string) => void;
   onScope: (scope: "draft" | "live") => void;
 }) {
+  const [expandedEntities, setExpandedEntities] = useState<Set<string | number>>(
+    () => new Set(),
+  );
   const skills = Object.keys(files).filter((path) => path.endsWith("SKILL.md"));
   const components = Object.keys(files).filter((path) => path.endsWith(".tsx"));
   const functions = Object.keys(files).filter((path) => path.endsWith(".py"));
@@ -101,9 +104,6 @@ export function AppOverview({
   return (
     <div className="workspace-overview">
       <div className="overview-eyebrow">
-        <span>
-          <span className="tiny-star">✻</span> THE BIG PICTURE
-        </span>
         <div className="scope-toggle" aria-label="Overview source">
           <button
             className={scope === "draft" ? "selected" : ""}
@@ -122,19 +122,16 @@ export function AppOverview({
       </div>
       <div className="overview-hero">
         <div className="overview-hero-copy">
-          <div className="hero-caption">
-            A LITTLE APP. A LOT OF POSSIBILITY.
-          </div>
           <h1>{manifest.app.name}</h1>
           <p>
             {manifest.app.description ||
-              "Your idea, taking shape. Give this app a description in its manifest."}
+              "Add an app description in manifest.json."}
           </p>
           <button
             onClick={() => openFile("manifest.json")}
             className="hero-link"
           >
-            Explore the manifest <ArrowRight size={14} />
+            Open manifest <ArrowRight size={14} />
           </button>
         </div>
         <div className="app-orbit" aria-hidden="true">
@@ -160,8 +157,7 @@ export function AppOverview({
       </div>
       <div className="workspace-section-heading">
         <div>
-          <h2>The building blocks</h2>
-          <p>Real files. One app. All yours.</p>
+          <h2>Source files</h2>
         </div>
         <span className="section-meta">
           {Object.keys(files).length} SOURCE FILES
@@ -194,8 +190,7 @@ export function AppOverview({
         <section className="overview-section">
           <div className="workspace-section-heading">
             <div>
-              <h2>What your agent can do</h2>
-              <p>Tools turn your app into useful actions.</p>
+              <h2>Tools</h2>
             </div>
             <span className="count-bubble">{manifest.tools.length}</span>
           </div>
@@ -276,7 +271,7 @@ export function AppOverview({
               onClick={() => openFile("manifest.json")}
             >
               <Workflow size={24} />
-              <strong>Give your agent something to do</strong>
+              <strong>No tools defined</strong>
               <span>
                 Define actions in the manifest to expose your app’s
                 capabilities.
@@ -290,50 +285,66 @@ export function AppOverview({
         <section className="overview-section">
           <div className="workspace-section-heading">
             <div>
-              <h2>What it remembers</h2>
-              <p>The shape of your app’s data.</p>
+              <h2>Data model</h2>
             </div>
             <Database size={16} className="text-muted-foreground" />
           </div>
           <div className="entity-cards">
             {manifest.entities.map((entity, index) => (
-              <button
-                key={entity.id ?? index}
-                className="entity-card"
-                onClick={() => openFile("manifest.json")}
-              >
-                <div className="entity-card-title">
+              <div key={entity.id ?? index} className="entity-card">
+                <button
+                  type="button"
+                  className="entity-card-title"
+                  onClick={() => openFile("manifest.json")}
+                >
                   <span>
                     <Database size={14} />
                     {title(entity.name)}
                   </span>
                   <span>{entity.fields.length} fields</span>
-                </div>
-                {entity.fields.slice(0, 5).map((field, fieldIndex) => (
-                  <div className="entity-field" key={field.id ?? fieldIndex}>
-                    <span>
-                      {field.name}
-                      {field.required && <sup> *</sup>}
-                    </span>
-                    <span>
-                      {field.type === "reference" ? (
-                        <>
-                          <Link2 size={10} />
-                          {manifest.entities.find((e) => e.id === field.target)
-                            ?.name ?? "reference"}
-                        </>
-                      ) : (
-                        field.type
-                      )}
-                    </span>
-                  </div>
-                ))}
+                </button>
+                {entity.fields
+                  .slice(0, expandedEntities.has(entity.id ?? index) ? undefined : 5)
+                  .map((field, fieldIndex) => (
+                    <div className="entity-field" key={field.id ?? fieldIndex}>
+                      <span>
+                        {field.name}
+                        {field.required && <sup> *</sup>}
+                      </span>
+                      <span>
+                        {field.type === "reference" ? (
+                          <>
+                            <Link2 size={10} />
+                            {manifest.entities.find((e) => e.id === field.target)
+                              ?.name ?? "reference"}
+                          </>
+                        ) : (
+                          field.type
+                        )}
+                      </span>
+                    </div>
+                  ))}
                 {entity.fields.length > 5 && (
-                  <span className="more-fields">
-                    + {entity.fields.length - 5} more fields
-                  </span>
+                  <button
+                    type="button"
+                    className="more-fields"
+                    aria-expanded={expandedEntities.has(entity.id ?? index)}
+                    onClick={() =>
+                      setExpandedEntities((previous) => {
+                        const next = new Set(previous);
+                        const key = entity.id ?? index;
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })
+                    }
+                  >
+                    {expandedEntities.has(entity.id ?? index)
+                      ? "Show fewer fields"
+                      : `+ ${entity.fields.length - 5} more fields`}
+                  </button>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         </section>
@@ -341,10 +352,7 @@ export function AppOverview({
       <section className="overview-section">
         <div className="workspace-section-heading">
           <div>
-            <h2>A mind of its own. Your instructions.</h2>
-            <p>
-              Skills give your agent context, judgment, and a way of working.
-            </p>
+            <h2>Skills</h2>
           </div>
           <button className="subtle-button" onClick={() => addFile("skill")}>
             <Plus size={13} /> Add skill
@@ -376,11 +384,8 @@ export function AppOverview({
             >
               <BookOpen size={22} />
               <div>
-                <strong>Teach your agent how you work</strong>
-                <p>
-                  Add a Markdown skill. A few thoughtful instructions go a long
-                  way.
-                </p>
+                <strong>No skills added</strong>
+                <p>Add a Markdown file with agent instructions.</p>
               </div>
               <Plus size={16} />
             </button>
@@ -391,8 +396,7 @@ export function AppOverview({
         <section className="overview-section">
           <div className="workspace-section-heading">
             <div>
-              <h2>The logic behind the action</h2>
-              <p>Functions extend what your app can do.</p>
+              <h2>Functions</h2>
             </div>
             <Braces size={17} />
           </div>
@@ -420,7 +424,7 @@ export function AppOverview({
       <div className="capability-card">
         <ShieldCheck size={21} />
         <div>
-          <strong>Clear boundaries. Confident building.</strong>
+          <strong>Capabilities</strong>
           <p>
             {network.length || hasModel || dataGrants.length
               ? "Functions can use only the capabilities declared in the manifest."
@@ -458,12 +462,6 @@ export function AppOverview({
         >
           <ArrowRight size={15} />
         </button>
-      </div>
-      <div className="overview-footer">
-        <span>Built with intention. Changed with confidence.</span>
-        <span>
-          OPEN WORKBENCH <ArrowDown size={11} />
-        </span>
       </div>
     </div>
   );

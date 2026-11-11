@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { extractUiResource, type AgentBackend, type AppDraft } from "../agent-backend.js";
 import { createBuildTools, readAppBundle, saveAndInstall } from "../build-tools.js";
+import { createWebTools } from "../web-tools.js";
 
 const MODEL_PROVIDER = "openrouter";
 export const DEFAULT_MODEL_ID = "z-ai/glm-5.3-flash";
@@ -24,8 +25,8 @@ const SYSTEM_PROMPT = readFileSync(
 /**
  * Builds the app-authoring agent backend: a Pi coding-agent session scoped
  * to a fresh scratch workspace, with native file tools for drafting and
- * four custom tools (ask_questions, update_plan, validate_app,
- * present_app) for talking to the user and the engine. Structurally
+ * app tools (ask_questions, update_plan, validate_app, present_app)
+ * for talking to the user and the engine, plus public web research. Structurally
  * parallel to createPiAgentBackend, but deliberately does not share its
  * capabilities (installed apps' skills/MCP tools) -- this agent's job is
  * to produce a new app, not use existing ones. It does load its own set of
@@ -74,6 +75,7 @@ export async function createBuildAgentBackend(
   await resourceLoader.reload();
 
   const { tools: buildTools, respondToTool } = createBuildTools(workspaceRoot, engineUrl);
+  const customTools = [...buildTools, ...createWebTools()];
 
   const { session } = await createAgentSession({
     cwd: workspaceRoot,
@@ -81,11 +83,11 @@ export async function createBuildAgentBackend(
     model,
     resourceLoader,
     // `tools` is an allowlist that also filters customTools (not just
-    // built-ins) -- omitting one of the four custom tools here would
+    // built-ins) -- omitting a custom tool here would
     // silently disable it, so their names must be listed explicitly
     // alongside the built-ins this agent is allowed (no bash/powershell).
-    tools: ["read", "write", "edit", "ls", "grep", "find", ...buildTools.map((t) => t.name)],
-    customTools: buildTools,
+    tools: ["read", "write", "edit", "ls", "grep", "find", ...customTools.map((t) => t.name)],
+    customTools,
     sessionManager: SessionManager.inMemory(),
   });
 

@@ -6,6 +6,11 @@ partner. `/build` redirects to Apps; new apps start in this same workspace.
 
 ## The experience
 
+- New app offers a blank app or a prompt. Blank apps contain only an app manifest,
+  with no predefined data model or tools. A prompt opens the new workspace and
+  starts its coding partner automatically. If the partner is offline, the prompt
+  is kept in its input. Both paths support an optional app name.
+
 - The overview is derived from source, showing the data model, tools, skills,
   components, functions, their connections, and function capabilities. Its Draft /
   Live switch makes the version being described explicit.
@@ -21,6 +26,10 @@ partner. `/build` redirects to Apps; new apps start in this same workspace.
   filesystem tool. Model credentials are server-side. Without an
   `OPENROUTER_API_KEY`, manual editing, validation, previews and activation remain
   available and the partner shows its setup state.
+- Thinking (when supplied by the selected model), tool arguments, execution state,
+  results and retry progress stream live. Transient model failures retry up to
+  three times with exponential backoff; exhausted and permanent failures are
+  saved as errors rather than reported as successful completion.
 - Preview compiles a component and renders it in a script-only iframe. Editable
   sample props update its display. The iframe has an opaque origin and a CSP that
   blocks network access; sample inputs never touch live records.
@@ -51,6 +60,18 @@ draft, baseline source, source version, revisions, edit attribution and transcri
 Writes use a same-directory temporary file and rename. Preserve this directory in
 backups; the existing runtime data volume includes it in Docker Compose.
 
+Coding partner runs belong to the runtime, independently of their browser
+connection. Streams flush immediately and send keepalive comments every 15 seconds.
+The browser retries broken connections up to five times and resumes from its last
+event ID. A client-generated run ID makes the initial request idempotent, so a lost
+response cannot start a second set of edits. Reopening an app automatically
+attaches to its active run and restores live activity. Stop explicitly cancels a run; leaving
+the page disconnects the observer. A connection without any bytes for 45 seconds
+is treated as stalled and reconnected. Runs have a 30-minute limit. Replay is held in
+memory (up to 16 MiB per run) until ten minutes after completion; runtime restarts
+do not resume an in-flight model session. Completed source edits and final
+transcripts, including thinking and tool activity, are stored with the project.
+
 Catalog source is imported when an existing engine app is first opened. Source
 revisions are distinct from `manifest.app.version`. Workspaces are the supported
 editing surface after import; edits made externally to catalog files are not
@@ -80,7 +101,7 @@ ownership checks stay on the runtime; the engine remains an internal service.
 | Route | Purpose |
 | --- | --- |
 | `GET /api/workspaces` | List this user's projects |
-| `POST /api/workspaces` | Create a blank, tracker, or research project |
+| `POST /api/workspaces` | Create a blank project (optional name) |
 | `GET /api/workspaces/:id` | Read source, baseline, history, conversation and state |
 | `PATCH /api/workspaces/:id` | Version-checked source patch |
 | `POST /api/workspaces/:id/validate` | Manifest, source, Python, package and React checks |
@@ -88,6 +109,8 @@ ownership checks stay on the runtime; the engine remains an internal service.
 | `POST /api/workspaces/:id/apply` | Revalidate and activate a reviewed revision |
 | `POST /api/workspaces/:id/restore` | Restore baseline or revision source into the draft |
 | `POST /api/workspaces/:id/chat` | Stream the app-scoped coding partner |
+| `GET /api/workspaces/:id/chat?runId=...&after=...` | Reconnect and replay events from an existing run |
+| `POST /api/workspaces/:id/chat-stop` | Explicitly stop a run by its run ID |
 
 ## Verification
 

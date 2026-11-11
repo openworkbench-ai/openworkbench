@@ -10,14 +10,8 @@ import {
 import { join } from "node:path";
 
 export type SourceFiles = Record<string, string>;
-export interface WorkspaceMessage {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  at: string;
-  tools?: { name: string; path?: string; error?: boolean }[];
-  error?: string;
-}
+import type { WorkspaceMessage } from "../../packages/workspace-chat.js";
+export type { WorkspaceMessage } from "../../packages/workspace-chat.js";
 export interface WorkspaceRevision {
   id: string;
   number: number;
@@ -267,6 +261,11 @@ export function createWorkspaceStore(root: string) {
       p.authors = {};
       p.version++;
       p.updatedAt = new Date().toISOString();
+      return save(userId, p);
+    },
+    clearMessages(userId: string, id: string, version: number) {
+      const p = requireProject(userId, id, version);
+      p.messages = [];
       return save(userId, p);
     },
     addMessage(userId: string, id: string, message: WorkspaceMessage) {

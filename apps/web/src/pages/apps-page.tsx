@@ -4,14 +4,12 @@ import {
   ArrowRight,
   ArrowUpRight,
   Check,
-  Code2,
   Grid2X2,
   Layers3,
   List,
   LoaderCircle,
   Plus,
   Search,
-  Sparkles,
 } from "lucide-react";
 import { fetchApps, type AppInfo } from "@/lib/api";
 import { createWorkspace } from "@/lib/workspace-api";
@@ -36,7 +34,8 @@ export function AppsPage() {
   const [layout, setLayout] = useState("grid");
   const [creating, setCreating] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [template, setTemplate] = useState("blank");
+  const [startMode, setStartMode] = useState<"blank" | "prompt">("blank");
+  const [prompt, setPrompt] = useState("");
   const [name, setName] = useState("");
   const [createError, setCreateError] = useState("");
   useEffect(() => {
@@ -60,13 +59,23 @@ export function AppsPage() {
   );
   const draftCount = apps?.filter((app) => app.status === "draft").length ?? 0;
   const liveCount = (apps?.length ?? 0) - draftCount;
+  function openCreate() {
+    setStartMode("blank");
+    setPrompt("");
+    setName("");
+    setCreateError("");
+    setCreateOpen(true);
+  }
   async function create() {
+    if (creating || (startMode === "prompt" && !prompt.trim())) return;
     setCreating(true);
     setCreateError("");
     try {
-      const project = await createWorkspace(name, template);
+      const project = await createWorkspace(name);
       window.dispatchEvent(new Event("owb:apps-changed"));
-      navigate(`/apps/${project.id}`);
+      navigate(`/apps/${project.id}`, {
+        state: startMode === "prompt" ? { initialPrompt: prompt.trim() } : null,
+      });
     } catch (error) {
       setCreateError((error as Error).message);
     } finally {
@@ -75,32 +84,15 @@ export function AppsPage() {
   }
   return (
     <div className="apps-library">
-      <header className="library-header">
-        <span>
-          <span className="tiny-star">✻</span> YOUR WORKBENCH
-        </span>
-        <span className="library-header-note">A home for your ideas.</span>
-      </header>
       <div className="library-scroll">
         <div className="library-content">
           <div className="library-intro">
             <div>
-              <div className="library-eyebrow">
-                <span /> SMALL TOOLS. BIG POSSIBILITIES.
-              </div>
-              <h1>Made for your world.</h1>
-              <p>
-                A collection of apps that work the way you do.
-                <br />
-                Open one up. See how it works. Make it yours.
-              </p>
+              <h1>Apps</h1>
             </div>
             <Button
               className="library-new-button"
-              onClick={() => {
-                setCreateOpen(true);
-                setCreateError("");
-              }}
+              onClick={openCreate}
             >
               <Plus size={16} /> New app
             </Button>
@@ -112,10 +104,7 @@ export function AppsPage() {
             </span>
             <span>
               <i className="draft-dot" />
-              {draftCount} in the making
-            </span>
-            <span className="library-summary-tail">
-              <Code2 size={13} /> Real code. Yours to shape.
+              {draftCount} drafts
             </span>
           </div>
           <div className="library-toolbar">
@@ -168,8 +157,7 @@ export function AppsPage() {
           )}
           {!apps && !error ? (
             <div className="library-loading">
-              <LoaderCircle className="animate-spin" size={20} /> Bringing your
-              apps together…
+              <LoaderCircle className="animate-spin" size={20} /> Loading apps…
             </div>
           ) : (
             <div className={`app-collection collection-${layout}`}>
@@ -192,7 +180,7 @@ export function AppsPage() {
                     >
                       <i />
                       {app.status === "draft"
-                        ? "In the making"
+                        ? "Draft"
                         : app.status === "inactive"
                           ? "Disabled"
                           : "Running"}
@@ -201,10 +189,7 @@ export function AppsPage() {
                   </div>
                   <div className="app-card-copy">
                     <h2>{app.name}</h2>
-                    <p>
-                      {app.description ||
-                        "A little space for your next big idea."}
-                    </p>
+                    {app.description && <p>{app.description}</p>}
                   </div>
                   <div className="app-card-footer">
                     <span>
@@ -216,7 +201,7 @@ export function AppsPage() {
                       </span>
                     ) : (
                       <span>
-                        Open & explore <ArrowRight size={12} />
+                        Open app <ArrowRight size={12} />
                       </span>
                     )}
                   </div>
@@ -225,17 +210,12 @@ export function AppsPage() {
               {!query && filter === "all" && (
                 <button
                   className="create-project-card"
-                  onClick={() => setCreateOpen(true)}
+                  onClick={openCreate}
                 >
                   <span className="create-card-icon">
                     <Plus size={24} />
                   </span>
-                  <strong>Room for one more.</strong>
-                  <p>
-                    That idea you keep coming back to?
-                    <br />
-                    Start here.
-                  </p>
+                  <strong>New app</strong>
                   <span className="create-card-action">
                     Create an app <ArrowRight size={13} />
                   </span>
@@ -248,14 +228,16 @@ export function AppsPage() {
               <Search size={27} />
               <h2>
                 {query
-                  ? "Nothing by that name. Yet."
-                  : "A little room to grow."}
+                  ? "No matching apps"
+                  : filter === "draft"
+                    ? "No drafts"
+                    : "No running apps"}
               </h2>
               <p>
                 {query
-                  ? "Try a different search, or turn that idea into a new app."
+                  ? "Try a different search."
                   : filter === "draft"
-                    ? "Start a new app and shape it at your own pace."
+                    ? "Create an app to start a draft."
                     : "Launch a draft to make it available to your agent."}
               </p>
               <Button
@@ -269,111 +251,116 @@ export function AppsPage() {
               </Button>
             </div>
           )}
-          <div className="library-bottom-note">
-            <span className="library-note-mark">✧</span>
-            <div>
-              <strong>You don’t have to build alone.</strong>
-              <p>
-                Every app has a coding partner. Explore its files, ask a
-                question, or make a change together.
-              </p>
-            </div>
-            <span>
-              YOU’RE IN CONTROL <Check size={12} />
-            </span>
-          </div>
         </div>
       </div>
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!creating) setCreateOpen(open);
+        }}
+      >
         <DialogContent className="workspace-dialog create-app-dialog">
           <DialogHeader>
-            <span className="dialog-eyebrow">
-              FROM A SPARK TO SOMETHING REAL
-            </span>
-            <DialogTitle>What will you make?</DialogTitle>
+            <DialogTitle>New app</DialogTitle>
             <DialogDescription>
-              Start with a little structure, or a clean sheet. You can change
-              everything as you go.
+              Start with a blank app or describe what you want to build.
             </DialogDescription>
           </DialogHeader>
-          <div className="starter-options">
-            {[
-              {
-                id: "blank",
-                icon: "✻",
-                title: "A fresh canvas",
-                description: "A minimal app. A world of possibility.",
-              },
-              {
-                id: "tracker",
-                icon: "◈",
-                title: "Project tracker",
-                description: "Tasks, priorities, and a little momentum.",
-              },
-              {
-                id: "research",
-                icon: "⌕",
-                title: "Research desk",
-                description: "Sources, notes, and the bigger picture.",
-              },
-            ].map((item) => (
-              <button
-                key={item.id}
-                className={template === item.id ? "selected" : ""}
-                onClick={() => setTemplate(item.id)}
+          <form
+            className="create-app-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void create();
+            }}
+          >
+            <div className="starter-options" role="group" aria-label="How to start">
+              {([
+                {
+                  id: "blank",
+                  icon: "✻",
+                  title: "Blank app",
+                  description: "Start from scratch.",
+                },
+                {
+                  id: "prompt",
+                  icon: "✧",
+                  title: "Build from a prompt",
+                  description: "Describe your idea and let the agent build it.",
+                },
+              ] as const).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={startMode === item.id}
+                  disabled={creating}
+                  className={startMode === item.id ? "selected" : ""}
+                  onClick={() => setStartMode(item.id)}
+                >
+                  <span className="starter-icon">{item.icon}</span>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <p>{item.description}</p>
+                  </div>
+                  <span className="starter-radio">
+                    {startMode === item.id && <Check size={11} />}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {startMode === "prompt" && (
+              <label className="workspace-form-label">
+                What would you like to build?
+                <textarea
+                  autoFocus
+                  className="create-app-prompt"
+                  placeholder="Describe what your app should do…"
+                  rows={4}
+                  required
+                  maxLength={32000}
+                  disabled={creating}
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                />
+              </label>
+            )}
+            <label className="workspace-form-label">
+              App name (optional)
+              <Input
+                autoFocus={startMode === "blank"}
+                placeholder="My app"
+                value={name}
+                disabled={creating}
+                maxLength={100}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            {createError && (
+              <p role="alert" className="text-sm text-destructive">
+                {createError}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                type="button"
+                disabled={creating}
+                onClick={() => setCreateOpen(false)}
               >
-                <span className="starter-icon">{item.icon}</span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.description}</p>
-                </div>
-                <span className="starter-radio">
-                  {template === item.id && <Check size={11} />}
-                </span>
-              </button>
-            ))}
-          </div>
-          <label className="workspace-form-label">
-            Give it a name
-            <Input
-              autoFocus
-              placeholder={
-                template === "tracker"
-                  ? "Project tracker"
-                  : template === "research"
-                    ? "Research desk"
-                    : "That good idea"
-              }
-              value={name}
-              maxLength={100}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !creating) void create();
-              }}
-            />
-          </label>
-          <p className="dialog-hint">
-            <Sparkles size={13} /> Your app opens in its own workspace. Build by
-            hand, with your coding partner, or a bit of both.
-          </p>
-          {createError && (
-            <p role="alert" className="text-sm text-destructive">
-              {createError}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              disabled={creating}
-              onClick={() => setCreateOpen(false)}
-            >
-              Not yet
-            </Button>
-            <Button disabled={creating} onClick={() => void create()}>
-              {creating ? <LoaderCircle className="animate-spin" /> : <Plus />}
-              {creating ? "Making room…" : "Create workspace"}
-            </Button>
-          </DialogFooter>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={creating || (startMode === "prompt" && !prompt.trim())}
+              >
+                {creating ? <LoaderCircle className="animate-spin" /> : <Plus />}
+                {creating
+                  ? "Creating…"
+                  : startMode === "prompt"
+                    ? "Build app"
+                    : "Create app"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

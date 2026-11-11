@@ -7,7 +7,6 @@ import {
   sourceChanges,
   WorkspaceError,
   type WorkspaceProject,
-  type WorkspaceMessage,
 } from "./workspace-store.js";
 import {
   applyWorkspace,
@@ -17,6 +16,7 @@ import {
   validateWorkspace,
 } from "./workspace-service.js";
 import { runWorkspaceAgent } from "./workspace-agent.js";
+import { createWorkspaceRun, type WorkspaceRun } from "./workspace-run.js";
 
 async function readJson(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
@@ -38,6 +38,8 @@ async function readJson(req: IncomingMessage): Promise<any> {
 }
 
 export function createWorkspaceRoutes(options: {
+  runAgent?: typeof runWorkspaceAgent;
+  chatHeartbeatMs?: number;
   root: string;
   engineUrl: string;
   defaultModel: string;
@@ -47,6 +49,8 @@ export function createWorkspaceRoutes(options: {
 }) {
   const store = createWorkspaceStore(options.root);
   const busy = new Set<string>();
+  const runs = new Map<string, WorkspaceRun>();
+  const activeRuns = new Map<string, string>();
   const keyFor = (userId: string, id: string) => `${userId}:${id}`;
   function load(userId: string, id: string): WorkspaceProject {
     let p = store.get(userId, id);
@@ -62,6 +66,7 @@ export function createWorkspaceRoutes(options: {
       ...p,
       changes: sourceChanges(p),
       busy: busy.has(keyFor(userId, p.id)),
+      activeRunId: activeRuns.get(keyFor(userId, p.id)),
       agent: {
         available: !!process.env.OPENROUTER_API_KEY,
         model: options.defaultModel,
@@ -101,17 +106,12 @@ export function createWorkspaceRoutes(options: {
               typeof body.name === "string"
                 ? body.name.trim().slice(0, 100)
                 : "";
-            const template = ["blank", "tracker", "research"].includes(
-              body.template,
-            )
-              ? body.template
-              : "blank";
             sendJson(
               res,
               201,
               dto(
                 userId,
-                store.create(userId, id, starterFiles(id, name, template)),
+                store.create(userId, id, starterFiles(id, name)),
               ),
             );
             return true;
@@ -127,6 +127,120 @@ export function createWorkspaceRoutes(options: {
           return true;
         }
         const key = keyFor(userId, id);
+        if (action === "chat" && req.method === "DELETE") {
+          const body = await readJson(req);
+          if (busy.has(key))
+            throw new WorkspaceError(
+              409,
+              "Wait for the current operation to finish before clearing the chat.",
+            );
+          if (!Number.isInteger(body.version))
+            throw new WorkspaceError(400, "A source version is required.");
+          sendJson(
+            res,
+            200,
+            dto(userId, store.clearMessages(userId, id, body.version)),
+          );
+          return true;
+        }
+        if (action === "chat" || action === "chat-stop") {
+          if (req.method === "GET" && action === "chat") {
+            const run = runs.get(`${key}:${url.searchParams.get("runId")}`);
+            if (!run)
+              throw new WorkspaceError(
+                404,
+                "This coding partner run is no longer available. Reload to see saved changes.",
+              );
+            run.attach(
+              res,
+              Number(url.searchParams.get("after") ?? 0),
+              options.chatHeartbeatMs,
+            );
+            return true;
+          }
+          if (req.method !== "POST")
+            throw new WorkspaceError(405, "Method not allowed.");
+          const body = await readJson(req);
+          if (
+            typeof body.runId !== "string" ||
+            !/^[a-zA-Z0-9-]{1,100}$/.test(body.runId)
+          )
+            throw new WorkspaceError(400, "A valid run ID is required.");
+          const runKey = `${key}:${body.runId}`;
+          const existing = runs.get(runKey);
+          if (action === "chat-stop") {
+            if (!existing)
+              throw new WorkspaceError(404, "Coding partner run not found.");
+            existing.stop();
+            sendJson(res, 200, { stopped: true });
+            return true;
+          }
+          // Idempotency also covers a lost response to the initial POST.
+          if (existing) {
+            existing.attach(res, 0, options.chatHeartbeatMs);
+            return true;
+          }
+          if (busy.has(key))
+            throw new WorkspaceError(
+              409,
+              "The app is being edited or built. Try again when it finishes.",
+            );
+          if (!Number.isInteger(body.version))
+            throw new WorkspaceError(400, "A source version is required.");
+          store.require(userId, id, body.version);
+          if (!process.env.OPENROUTER_API_KEY)
+            throw new WorkspaceError(
+              503,
+              "Set OPENROUTER_API_KEY in the server environment to connect the workspace agent.",
+            );
+          if (
+            typeof body.message !== "string" ||
+            !body.message.trim() ||
+            body.message.length > 32000
+          )
+            throw new WorkspaceError(
+              400,
+              "Provide a message of at most 32,000 characters.",
+            );
+          const modelId =
+            typeof body.modelId === "string"
+              ? body.modelId
+              : options.defaultModel;
+          if (!options.models().some((model) => model.id === modelId))
+            throw new WorkspaceError(400, "Unknown model.");
+          busy.add(key);
+          try {
+            const run = createWorkspaceRun({
+              store,
+              userId,
+              id,
+              engineUrl: options.engineUrl,
+              message: body.message,
+              selectedFile:
+                typeof body.selectedFile === "string"
+                  ? body.selectedFile
+                  : undefined,
+              modelId,
+              runAgent: options.runAgent,
+              onFinished() {
+                busy.delete(key);
+                activeRuns.delete(key);
+                const expiry = setTimeout(
+                  () => runs.delete(runKey),
+                  10 * 60 * 1000,
+                );
+                expiry.unref();
+              },
+            });
+            runs.set(runKey, run);
+            activeRuns.set(key, body.runId);
+            run.attach(res, 0, options.chatHeartbeatMs);
+          } catch (error) {
+            busy.delete(key);
+            throw error;
+          }
+          return true;
+        }
         if (busy.has(key))
           throw new WorkspaceError(
             409,
@@ -174,7 +288,7 @@ export function createWorkspaceRoutes(options: {
         }
         if (
           req.method === "POST" &&
-          ["validate", "apply", "preview", "chat"].includes(action)
+          ["validate", "apply", "preview"].includes(action)
         ) {
           const body = await readJson(req);
           if (busy.has(key))
@@ -223,107 +337,6 @@ export function createWorkspaceRoutes(options: {
               sendJson(res, 200, dto(userId, applied));
               return true;
             }
-            if (!process.env.OPENROUTER_API_KEY)
-              throw new WorkspaceError(
-                503,
-                "Set OPENROUTER_API_KEY in the server environment to connect the workspace agent.",
-              );
-            if (
-              typeof body.message !== "string" ||
-              !body.message.trim() ||
-              body.message.length > 32000
-            )
-              throw new WorkspaceError(
-                400,
-                "Provide a message of at most 32,000 characters.",
-              );
-            const modelId =
-              typeof body.modelId === "string"
-                ? body.modelId
-                : options.defaultModel;
-            if (!options.models().some((m) => m.id === modelId))
-              throw new WorkspaceError(400, "Unknown model.");
-            const controller = new AbortController();
-            let text = "";
-            const tools: NonNullable<WorkspaceMessage["tools"]> = [];
-            const pending = new Map<
-              string,
-              { name: string; path?: string; error?: boolean }
-            >();
-            const onClose = () => {
-              if (!res.writableEnded) controller.abort();
-            };
-            store.addMessage(userId, id, {
-              id: randomUUID(),
-              role: "user",
-              text: body.message,
-              at: new Date().toISOString(),
-            });
-            res.writeHead(200, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-            });
-            res.on("close", onClose);
-            let failure: string | undefined;
-            try {
-              await runWorkspaceAgent({
-                store,
-                userId,
-                id,
-                engineUrl: options.engineUrl,
-                message: body.message,
-                selectedFile:
-                  typeof body.selectedFile === "string"
-                    ? body.selectedFile
-                    : undefined,
-                modelId,
-                signal: controller.signal,
-                onEvent(event) {
-                  if (event.type === "text") text += event.delta;
-                  if (event.type === "tool_start") {
-                    const args = event.args as { path?: string };
-                    const tool = { name: event.toolName, path: args?.path };
-                    pending.set(event.toolCallId, tool);
-                    tools.push(tool);
-                  }
-                  if (event.type === "tool_end") {
-                    const tool = pending.get(event.toolCallId);
-                    if (tool) tool.error = event.isError;
-                  }
-                  if (!res.writableEnded && !res.destroyed)
-                    res.write(`data: ${JSON.stringify(event)}\n\n`);
-                },
-              });
-              if (controller.signal.aborted)
-                failure =
-                  "Stopped. Any completed edits are saved in your draft.";
-            } catch (error) {
-              failure = (error as Error).message;
-            } finally {
-              store.addMessage(userId, id, {
-                id: randomUUID(),
-                role: "assistant",
-                text:
-                  text ||
-                  (failure
-                    ? ""
-                    : "Done. Review the source changes before applying."),
-                at: new Date().toISOString(),
-                tools,
-                error: failure,
-              });
-              res.off("close", onClose);
-              if (!res.writableEnded && !res.destroyed) {
-                if (failure)
-                  res.write(
-                    `data: ${JSON.stringify({ type: "error", reason: failure })}\n\n`,
-                  );
-                res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-                res.end();
-              }
-            }
-            return true;
           } finally {
             busy.delete(key);
           }

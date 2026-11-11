@@ -1,17 +1,18 @@
 import { useState } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { AlertTriangle, Check, ChevronRight, CircleDashed, Loader2, Terminal } from "lucide-react"
+import { AlertTriangle, Check, ChevronRight, CircleDashed, CircleSlash, Loader2, Terminal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { CodeBlock } from "./code-block"
 
-type ToolStatus = "pending" | "running" | "success" | "error"
+type ToolStatus = "pending" | "running" | "success" | "error" | "interrupted"
 
 const statusMeta: Record<ToolStatus, { icon: React.ElementType; label: string; className: string }> = {
   pending: { icon: CircleDashed, label: "Queued", className: "text-muted-foreground" },
   running: { icon: Loader2, label: "Running", className: "text-ocean" },
   success: { icon: Check, label: "Done", className: "text-success" },
   error: { icon: AlertTriangle, label: "Failed", className: "text-destructive" },
+  interrupted: { icon: CircleSlash, label: "Interrupted", className: "text-muted-foreground" },
 }
 
 const toolCallVariants = cva("min-w-0 overflow-hidden rounded-lg border bg-card transition-colors", {
@@ -21,6 +22,7 @@ const toolCallVariants = cva("min-w-0 overflow-hidden rounded-lg border bg-card 
       running: "border-ocean/45",
       success: "border-border",
       error: "border-destructive/45",
+      interrupted: "border-dashed border-border",
     },
   },
   defaultVariants: { status: "success" },

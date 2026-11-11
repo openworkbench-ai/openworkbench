@@ -1,5 +1,10 @@
+import {
+  createWorkspaceChatState,
+  reduceWorkspaceChat,
+  type WorkspaceChatState,
+} from "../../../../packages/workspace-chat";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -47,10 +52,10 @@ import { useWorkspace } from "@/hooks/use-workspace";
 import { activateApp, deactivateApp, fetchApps } from "@/lib/api";
 import {
   applyWorkspace,
+  clearWorkspaceChat,
   restoreWorkspace,
   streamWorkspaceChat,
   validateWorkspace,
-  type WorkspaceMessage,
   type WorkspaceProject,
   type WorkspaceRevision,
   type WorkspaceValidation,
@@ -126,6 +131,12 @@ function newFile(kind: string, name: string, project: WorkspaceProject) {
 
 function Workspace({ id }: { id: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const startupPrompt = useRef(
+    typeof location.state?.initialPrompt === "string"
+      ? location.state.initialPrompt.trim()
+      : "",
+  );
   const {
     project,
     files,
@@ -166,8 +177,12 @@ function Workspace({ id }: { id: string }) {
     null,
   );
   const [streaming, setStreaming] = useState(false);
-  const [transient, setTransient] = useState<WorkspaceMessage | undefined>();
+  const [pendingMessage, setPendingMessage] = useState("");
+  const [chat, setChat] = useState<WorkspaceChatState>();
+  const transient = chat?.message;
   const abort = useRef<AbortController | null>(null);
+  const chatRunning = useRef(false);
+  const resumedRun = useRef<string | undefined>(undefined);
   const [initialPrompt, setInitialPrompt] = useState<{
     text: string;
     key: number;
@@ -212,7 +227,38 @@ function Workspace({ id }: { id: string }) {
     !!validation && validation.version === project?.version && !unsaved;
   const revision = project?.revisions.at(-1)?.number ?? 0;
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => abort.current?.abort("disconnect"), []);
+  useEffect(() => {
+    const runId = project?.activeRunId;
+    if (
+      !runId ||
+      chatRunning.current ||
+      resumedRun.current === runId ||
+      unsaved ||
+      operation
+    )
+      return;
+    resumedRun.current = runId;
+    void send("", project.agent.model, runId);
+  }, [project?.activeRunId, project?.agent.model, unsaved, operation]);
+  useEffect(() => {
+    if (!project || !startupPrompt.current || unsaved || operation) return;
+    const text = startupPrompt.current;
+    startupPrompt.current = "";
+    // Consume the handoff before starting so reloads and back navigation cannot
+    // submit the same creation prompt again. Active runs reconnect above.
+    navigate(location.pathname, { replace: true, state: null });
+    setAgentOpen(true);
+    if (project.messages.length || project.busy) return;
+    const restorePrompt = () => setInitialPrompt({ text, key: Date.now() });
+    if (!project.agent.available) {
+      restorePrompt();
+      return;
+    }
+    void send(text, project.agent.model).then((sent) => {
+      if (!sent) restorePrompt();
+    });
+  }, [project, unsaved, operation, navigate, location.pathname]);
   useEffect(() => {
     const partnerBreakpoint = window.matchMedia("(min-width: 1101px)");
     const explorerBreakpoint = window.matchMedia("(min-width: 901px)");
@@ -307,7 +353,7 @@ function Workspace({ id }: { id: string }) {
         toast(
           result.valid
             ? "All checks passed. Your draft is ready."
-            : `${result.problems.length} problem${result.problems.length === 1 ? "" : "s"} to work through.`,
+            : `${result.problems.length} validation problem${result.problems.length === 1 ? "" : "s"}.`,
         );
     } catch (error) {
       fail(error);
@@ -330,11 +376,7 @@ function Workspace({ id }: { id: string }) {
       setValidation(null);
       setReview(false);
       setReleaseMessage("");
-      toast(
-        current.installed
-          ? "Your changes are live. Nicely done."
-          : "Your app is live. Make it your own.",
-      );
+      toast(current.installed ? "Changes applied." : "App launched.");
       window.dispatchEvent(new Event("owb:apps-changed"));
     } catch (error) {
       fail(error);
@@ -426,20 +468,16 @@ function Workspace({ id }: { id: string }) {
       setFileError((error as Error).message);
     }
   }
-  async function send(message: string, modelId: string) {
+  async function send(message: string, modelId: string, resumeRunId?: string) {
+    if (chatRunning.current || operation) return;
+    chatRunning.current = true;
+    setPendingMessage(resumeRunId ? "" : message);
     setOperationError("");
     setStreaming(true);
     setValidation(null);
     const controller = new AbortController();
     abort.current = controller;
-    setTransient({
-      id: "streaming",
-      role: "assistant",
-      text: "",
-      at: new Date().toISOString(),
-      tools: [],
-    });
-    const pending = new Map<string, number>();
+    setChat(createWorkspaceChatState("streaming"));
     let refreshes = Promise.resolve();
     try {
       const current = await flush();
@@ -452,32 +490,10 @@ function Workspace({ id }: { id: string }) {
           selectedFile: view === "code" ? activeFile : undefined,
         },
         (event) => {
-          if (event.type === "text")
-            setTransient(
-              (prev) => prev && { ...prev, text: prev.text + event.delta },
-            );
-          if (event.type === "tool_start")
-            setTransient((prev) => {
-              if (!prev) return prev;
-              const tools = [
-                ...(prev.tools ?? []),
-                {
-                  name: event.toolName,
-                  path: (event.args as { path?: string })?.path,
-                },
-              ];
-              pending.set(event.toolCallId, tools.length - 1);
-              return { ...prev, tools };
-            });
+          setChat(
+            (previous) => previous && reduceWorkspaceChat(previous, event),
+          );
           if (event.type === "tool_end") {
-            setTransient((prev) => {
-              if (!prev) return prev;
-              const tools = [...(prev.tools ?? [])];
-              const index = pending.get(event.toolCallId);
-              if (index !== undefined && tools[index])
-                tools[index] = { ...tools[index], error: event.isError };
-              return { ...prev, tools };
-            });
             if (
               ["write_file", "edit_file", "delete_file"].includes(
                 event.toolName,
@@ -488,21 +504,39 @@ function Workspace({ id }: { id: string }) {
                 .then(() => {})
                 .catch(() => {});
           }
-          if (event.type === "error")
-            setTransient((prev) => prev && { ...prev, error: event.reason });
         },
         controller.signal,
+        resumeRunId,
       );
+      return true;
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         fail(error);
         toast((error as Error).message);
       }
+      return false;
     } finally {
       await refreshes;
       await reload().catch(fail);
       setStreaming(false);
-      setTransient(undefined);
+      setPendingMessage("");
+      setChat(undefined);
+      chatRunning.current = false;
+    }
+  }
+  async function clearChat() {
+    if (locked || chatRunning.current) return;
+    setOperation("clear-chat");
+    setOperationError("");
+    try {
+      const current = await flush();
+      accept(await clearWorkspaceChat(id, current.version));
+      setChat(undefined);
+    } catch (error) {
+      fail(error);
+      toast((error as Error).message);
+    } finally {
+      setOperation("");
     }
   }
   function askAboutFile() {
@@ -530,8 +564,7 @@ function Workspace({ id }: { id: string }) {
     return (
       <div className="workspace-opening">
         <span className="opening-mark">✻</span>
-        <h1>Opening your workbench.</h1>
-        <p>A little space for a big idea.</p>
+        <h1>Loading workspace…</h1>
         <LoaderCircle size={20} className="animate-spin" />
       </div>
     );
@@ -657,7 +690,7 @@ function Workspace({ id }: { id: string }) {
         </div>
       )}
       <div className="workspace-body">
-        {explorerOpen && (
+        {view === "code" && explorerOpen && (
           <>
             <div
               className="explorer-mobile-backdrop"
@@ -666,7 +699,7 @@ function Workspace({ id }: { id: string }) {
             <FileExplorer
               files={files}
               baseFiles={project.baseFiles}
-              selected={view === "code" ? activeFile : undefined}
+              selected={activeFile}
               onSelect={openFile}
               onAdd={addFile}
               disabled={locked}
@@ -677,13 +710,16 @@ function Workspace({ id }: { id: string }) {
         )}
         <div className="workspace-center">
           <nav className="workspace-tabs" aria-label="App workspace views">
-            <button
-              className="explorer-toggle"
-              onClick={() => setExplorerOpen((value) => !value)}
-              aria-label="Toggle source explorer"
-            >
-              <PanelLeft size={15} />
-            </button>
+            {view === "code" && (
+              <button
+                className="explorer-toggle"
+                onClick={() => setExplorerOpen((value) => !value)}
+                aria-label="Toggle source explorer"
+                aria-expanded={explorerOpen}
+              >
+                <PanelLeft size={15} />
+              </button>
+            )}
             {views.map((item) => (
               <button
                 key={item.id}
@@ -720,7 +756,7 @@ function Workspace({ id }: { id: string }) {
               ) : (
                 <div className="workspace-empty-state">
                   <FileJson2 size={32} />
-                  <h2>Your manifest needs a little attention.</h2>
+                  <h2>Invalid manifest JSON</h2>
                   <p>
                     Your draft is saved. Fix its JSON to bring the overview
                     back.
@@ -886,8 +922,7 @@ function Workspace({ id }: { id: string }) {
               ))}
             {view === "data" && (
               <div className="workspace-data">
-                <span className="eyebrow">THE THINGS THAT STAY</span>
-                <h1>Your app’s memory.</h1>
+                <h1>Data</h1>
                 <p className="workspace-section-intro">
                   Explore the records in your running app. Source edits and
                   preview inputs stay separate.
@@ -897,7 +932,7 @@ function Workspace({ id }: { id: string }) {
                 ) : (
                   <div className="workspace-empty-state">
                     <Database size={30} />
-                    <h2>A fresh start.</h2>
+                    <h2>No database yet</h2>
                     <p>
                       Launch your app to give it a database. Your draft and any
                       seed data are waiting in the explorer.
@@ -942,8 +977,7 @@ function Workspace({ id }: { id: string }) {
             )}
             {view === "history" && (
               <div className="workspace-history">
-                <span className="eyebrow">A RECORD OF MAKING</span>
-                <h1>Good things evolve.</h1>
+                <h1>Revision history</h1>
                 <p className="workspace-section-intro">
                   Every release is a checkpoint. Bring an earlier version back
                   into your draft whenever you need it.
@@ -998,7 +1032,7 @@ function Workspace({ id }: { id: string }) {
                 ) : (
                   <div className="workspace-empty-state">
                     <History size={30} />
-                    <h2>Your story starts here.</h2>
+                    <h2>No revisions yet</h2>
                     <p>
                       Launch your first revision to create a source checkpoint.
                     </p>
@@ -1015,14 +1049,11 @@ function Workspace({ id }: { id: string }) {
               <div className="changes-workspace">
                 <div className="changes-heading">
                   <div>
-                    <span className="eyebrow">
-                      A LITTLE DIFFERENT. A LITTLE BETTER.
-                    </span>
-                    <h1>Your work, in view.</h1>
+                    <h1>Changes</h1>
                     <p>
                       {changes.length
                         ? `${changes.length} file${changes.length === 1 ? "" : "s"} changed since ${project.installed ? "the running version" : "you started"}.`
-                        : "Your draft matches the running version. A clean slate for your next idea."}
+                        : "No changes in this draft."}
                     </p>
                   </div>
                   {project.installed && changes.length > 0 && (
@@ -1109,7 +1140,7 @@ function Workspace({ id }: { id: string }) {
                 ) : (
                   <div className="workspace-empty-state">
                     <CircleCheck size={33} />
-                    <h2>All caught up.</h2>
+                    <h2>No changes</h2>
                     <p>
                       Changes you make by hand or with your coding partner will
                       appear here.
@@ -1189,7 +1220,13 @@ function Workspace({ id }: { id: string }) {
               project={project}
               selectedFile={view === "code" ? activeFile : undefined}
               streaming={streaming}
+              pendingMessage={pendingMessage}
               transient={transient}
+              retry={chat?.retry}
+              reconnecting={chat?.connection?.status === "reconnecting"}
+              clearing={operation === "clear-chat"}
+              clearDisabled={locked}
+              onClear={() => void clearChat()}
               onSend={(message, model) => void send(message, model)}
               onStop={() => abort.current?.abort()}
               onClose={() => setAgentOpen(false)}
@@ -1203,10 +1240,9 @@ function Workspace({ id }: { id: string }) {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="workspace-dialog">
           <DialogHeader>
-            <span className="dialog-eyebrow">ONE MORE BUILDING BLOCK</span>
-            <DialogTitle>A little more possibility.</DialogTitle>
+            <DialogTitle>Add file</DialogTitle>
             <DialogDescription>
-              Add a real source file to your app. Start small and make it yours.
+              Choose a file type and name.
             </DialogDescription>
           </DialogHeader>
           <div className="file-kind-options">
@@ -1308,22 +1344,19 @@ function Workspace({ id }: { id: string }) {
       >
         <DialogContent className="workspace-dialog review-dialog">
           <DialogHeader>
-            <span className="dialog-eyebrow">THE LAST LOOK</span>
             <DialogTitle>
-              {project.installed
-                ? "Ready when you are."
-                : "Your idea, ready for the world."}
+              {project.installed ? "Review changes" : "Review app"}
             </DialogTitle>
             <DialogDescription>
               {project.installed
-                ? "Review what changes. You decide when it becomes the running app."
+                ? "Review source and schema changes before applying them."
                 : "Launch this revision to make the app and its tools available to your agent."}
             </DialogDescription>
           </DialogHeader>
           {operation === "review" ? (
             <div className="review-checking">
               <LoaderCircle className="animate-spin" size={23} />
-              <strong>Giving your app a careful look.</strong>
+              <strong>Running checks…</strong>
               <p>
                 Validating the manifest, checking code, and inspecting schema
                 changes.
@@ -1344,7 +1377,7 @@ function Workspace({ id }: { id: string }) {
                     <strong>
                       {validation.valid
                         ? "All checks passed"
-                        : "A few things need attention"}
+                        : "Validation failed"}
                     </strong>
                     <p>
                       {validation.valid

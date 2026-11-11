@@ -86,7 +86,7 @@ const setup: BeforeMount = (editor) => {
 };
 const options: monaco.editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"JetBrains Mono", monospace',
-  fontSize: 12,
+  fontSize: 14,
   lineHeight: 23,
   padding: { top: 20, bottom: 24 },
   minimap: { enabled: false },

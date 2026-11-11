@@ -305,103 +305,18 @@ export async function previewWorkspace(p: WorkspaceProject, component: string) {
   });
 }
 
-export function starterFiles(
-  id: string,
-  name: string,
-  template: string,
-): SourceFiles {
-  const research = template === "research";
-  const blank = template === "blank";
-  const entity = research ? "source" : "task";
+export function starterFiles(id: string, name: string): SourceFiles {
   const manifest = {
     app: {
       id,
-      name:
-        name ||
-        (research
-          ? "Research desk"
-          : blank
-            ? "Untitled app"
-            : "Project tracker"),
-      description: research
-        ? "Collect useful sources, capture insights, and turn research into clear answers."
-        : blank
-          ? "A little space for your next big idea."
-          : "Keep projects moving with tasks, priorities, and a clear view of what comes next.",
-      emoji: research ? "🔎" : blank ? "✳️" : "◈",
-      color: research ? "#6e8c94" : "#61754e",
+      name: name || "Untitled app",
+      description: "A little space for your next big idea.",
+      emoji: "✳️",
+      color: "#61754e",
       version: 1,
     },
-    entities: [
-      {
-        id: `ent_${entity}`,
-        name: entity,
-        fields: [
-          {
-            id: `fld_${entity}_title`,
-            name: "title",
-            type: "text",
-            required: true,
-          },
-          ...(research
-            ? [
-                { id: "fld_source_url", name: "url", type: "text" },
-                { id: "fld_source_notes", name: "notes", type: "text" },
-              ]
-            : [
-                {
-                  id: "fld_task_status",
-                  name: "status",
-                  type: "enum",
-                  values: ["todo", "in_progress", "done"],
-                  default: "todo",
-                },
-                {
-                  id: "fld_task_priority",
-                  name: "priority",
-                  type: "enum",
-                  values: ["low", "medium", "high"],
-                  default: "medium",
-                },
-              ]),
-        ],
-      },
-    ],
-    tools: [
-      {
-        id: `tool_add_${entity}`,
-        name: `add_${entity}`,
-        description: `Save a ${entity}`,
-        params: [
-          { id: "p_title", name: "title", type: "text", required: true },
-        ],
-        steps: [
-          {
-            id: "created",
-            op: "create",
-            entity: `ent_${entity}`,
-            set: { title: "$params.title" },
-          },
-        ],
-        ...(blank ? {} : { ui: { component: "ItemCard" } }),
-      },
-      {
-        id: `tool_list_${entity}`,
-        name: `list_${entity}s`,
-        description: `List saved ${entity}s`,
-        params: [],
-        steps: [{ id: "items", op: "list", entity: `ent_${entity}` }],
-      },
-    ],
+    entities: [],
+    tools: [],
   };
-  const files: SourceFiles = {
-    "manifest.json": JSON.stringify(manifest, null, 2) + "\n",
-  };
-  if (!blank) {
-    files[`skills/${research ? "research" : "manage-tasks"}/SKILL.md`] =
-      `---\nname: ${research ? "research" : "manage-tasks"}\ndescription: ${research ? "Collect sources and help synthesize research." : "Help organize tasks and decide what to work on next."}\n---\n\n# ${research ? "Research with intent" : "Keep work moving"}\n\n${research ? "Save useful sources with a clear title. Ask what the user wants to learn. Summarize what the evidence supports, and distinguish facts from open questions." : "Help the user capture tasks with clear, actionable titles. Check existing tasks before adding duplicates. Keep suggestions practical and explain your reasoning."}\n\n## Working together\n\nAsk before deleting information. Keep the user in control of the next step.\n`;
-    files["ui/components/ItemCard.tsx"] =
-      `import { Card, CardHeader, CardTitle, CardContent, Badge, Muted } from "@openworkbench/app-ui-kit"\nimport type { ${research ? "Source" : "Task"} } from "../generated/entities.d.ts"\n\nexport default function ItemCard(props: Partial<${research ? "Source" : "Task"}>) {\n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>{props.title ?? "A fresh start"}</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <Badge variant="accent">${research ? "Source" : '{props.status ?? "todo"}'}</Badge>\n        <Muted className="mt-3">${research ? '{props.notes ?? "A useful piece of the bigger picture."}' : "One step closer. Keep going."}</Muted>\n      </CardContent>\n    </Card>\n  )\n}\n`;
-  }
-  return files;
+  return { "manifest.json": JSON.stringify(manifest, null, 2) + "\n" };
 }

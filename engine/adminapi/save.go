@@ -61,6 +61,8 @@ type saveRequest struct {
 	UI            []saveUIComponent      `json:"ui,omitempty"`
 	FunctionFiles []saveFunctionFile     `json:"functionFiles,omitempty"`
 	PythonWheels  []pythonpackages.Wheel `json:"pythonWheels,omitempty"`
+	SourceFiles   []saveFunctionFile     `json:"sourceFiles,omitempty"`
+	Confirm       bool                   `json:"confirm,omitempty"`
 }
 
 type saveFunctionFile struct {
@@ -73,6 +75,8 @@ type saveFunctionFile struct {
 var uiComponentNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
 
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	id := r.PathValue("id")
 	if !lifecycle.ValidID(id) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "app id must match ^[a-z][a-z0-9_]*$")
@@ -181,6 +185,18 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_python_packages", err.Error())
 		return
 	}
+	seenSource := map[string]bool{}
+	for _, file := range req.SourceFiles {
+		if !sourceFilePattern.MatchString(file.Path) || len(file.Content) > 1<<20 || seenSource[file.Path] {
+			writeError(w, http.StatusBadRequest, "invalid_source_file", "sourceFiles must be unique app component or Python source paths, each at most 1 MiB")
+			return
+		}
+		seenSource[file.Path] = true
+	}
+	if r.Method == http.MethodPost {
+		s.applyBundle(w, r, id, app, req)
+		return
+	}
 	if err := writeAppBundle(s.catalogDir, id, req); err != nil {
 		writeError(w, http.StatusInternalServerError, "save_failed", err.Error())
 		return
@@ -188,6 +204,8 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 }
+
+var sourceFilePattern = regexp.MustCompile(`^(ui/components/[A-Za-z][A-Za-z0-9_]*\.(tsx|ts)|functions/[A-Za-z][A-Za-z0-9_]*\.py)$`)
 
 // writeAppBundle stages manifest.json, one skills/<name>/SKILL.md per skill,
 // declared Python function sources, one data/<entity>.json per data entry,
@@ -264,10 +282,19 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 			return err
 		}
 	}
+	for _, file := range req.SourceFiles {
+		target := filepath.Join(stagingDir, file.Path)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, []byte(file.Content), 0o644); err != nil {
+			return err
+		}
+	}
 
 	if len(req.UI) > 0 {
 		uiDir := filepath.Join(stagingDir, "ui")
-		if err := os.Mkdir(uiDir, 0o755); err != nil {
+		if err := os.MkdirAll(uiDir, 0o755); err != nil {
 			return fmt.Errorf("create ui dir: %w", err)
 		}
 		var componentsDir string
@@ -280,7 +307,7 @@ func writeAppBundle(catalogDir, id string, req saveRequest) error {
 			}
 			if componentsDir == "" {
 				componentsDir = filepath.Join(uiDir, "components")
-				if err := os.Mkdir(componentsDir, 0o755); err != nil {
+				if err := os.MkdirAll(componentsDir, 0o755); err != nil {
 					return fmt.Errorf("create ui/components dir: %w", err)
 				}
 			}

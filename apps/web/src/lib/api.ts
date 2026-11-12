@@ -6,7 +6,9 @@ export interface AppInfo {
   color?: string
   /** Whether this app can be activated/deactivated — only catalog (engine-backed) apps go through that lifecycle. */
   manageable?: boolean
-  status?: "active" | "inactive"
+  status?: "active" | "inactive" | "draft"
+  installed?: boolean
+  changes?: number
 }
 
 export interface ToolParam {
@@ -214,21 +216,8 @@ export async function switchModel(modelId: string): Promise<{ current: string }>
   )
 }
 
-export type AgentStreamEvent =
-  | { type: "text"; delta: string }
-  | { type: "thinking"; delta: string }
-  | { type: "tool_start"; toolCallId: string; toolName: string; args: unknown }
-  | {
-      type: "tool_end"
-      toolCallId: string
-      toolName: string
-      result: unknown
-      isError: boolean
-      resourceUri?: string
-      appId?: string
-    }
-  | { type: "done" }
-  | { type: "error"; reason: string }
+import type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
+export type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
 
 /** Shared streaming plumbing for both `/chat` and `/build-chat` — same SSE event shape. */
 async function streamSse(

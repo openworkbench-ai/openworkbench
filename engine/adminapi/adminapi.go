@@ -20,6 +20,7 @@ package adminapi
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"pocketknife/lifecycle"
 	"pocketknife/registry"
@@ -28,6 +29,7 @@ import (
 // Server wraps the registry and catalog/data directories every install
 // resolves an app's manifest and database against.
 type Server struct {
+	mu         sync.Mutex
 	reg        *registry.Registry
 	catalogDir string
 	dataDir    string
@@ -40,6 +42,8 @@ func NewServer(reg *registry.Registry, catalogDir, dataDir string) http.Handler 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/apps", s.handleList)
 	mux.HandleFunc("PUT /admin/apps/{id}", s.handleSave)
+	mux.HandleFunc("POST /admin/apps/{id}/apply", s.handleSave)
+	mux.HandleFunc("POST /admin/apps/{id}/changes", s.handleChanges)
 	mux.HandleFunc("POST /admin/apps/{id}/install", s.handleInstall)
 	mux.HandleFunc("POST /admin/apps/{id}/activate", s.handleActivate)
 	mux.HandleFunc("POST /admin/apps/{id}/deactivate", s.handleDeactivate)
@@ -62,6 +66,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	id := r.PathValue("id")
 	if !lifecycle.ValidID(id) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "app id must match ^[a-z][a-z0-9_]*$")
@@ -77,6 +83,8 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleActivate(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	id := r.PathValue("id")
 	if !lifecycle.ValidID(id) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "app id must match ^[a-z][a-z0-9_]*$")
@@ -91,6 +99,8 @@ func (s *Server) handleActivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeactivate(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	id := r.PathValue("id")
 	if !lifecycle.ValidID(id) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "app id must match ^[a-z][a-z0-9_]*$")

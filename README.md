@@ -1,6 +1,16 @@
 # openworkbench
 
-A minimal agent built with Anthropic's [Pi SDK](https://pi.dev/docs/latest/sdk), running against OpenRouter as the model provider.
+An app workspace for people and agents. Build and edit bounded applications with
+real source files, an app-scoped coding partner, and control over what goes live.
+The agent runtime uses [Pi SDK](https://pi.dev/docs/latest/sdk) with OpenRouter as
+the model provider.
+
+Apps now open in a unified workspace: a source-derived overview, Monaco editor,
+Markdown skills, React previews, Python functions, source diffs, live data,
+reviewed activation, and revision history. Manual edits and the app-scoped coding
+partner share a durable draft. There is no separate builder page. See
+[App workspace](docs/app-workspace.md) for architecture, persistence, boundaries,
+and verification details.
 
 ## Setup
 
@@ -73,6 +83,45 @@ volumes:
 ```
 
 ## Apps and capabilities
+
+All agents include `web_search` and `open_page` by default, even without
+installed apps. `open_page` extracts the main content with Mozilla Readability
+and JSDOM, preserving headings, links, code blocks and tables as Markdown.
+It automatically uses Playwright Chromium for pages that appear to need
+JavaScript. The agent can force rendering with `render: "always"`, or use
+`render: "never"` for HTML only. Results report extraction method, rendering,
+and warnings for sparse content, login walls and access checks. PDFs and
+content drawn only on a canvas are not supported.
+
+For local development, install Chromium once after `npm install`:
+
+```bash
+npm run browser:install -w apps/runtime
+```
+
+The runtime Docker image includes Chromium and its system dependencies.
+Browser sessions use fresh storage, support script-driven API requests, and
+route resources through a proxy that pins connections to checked public DNS
+answers. Forms and browser interaction tools are not exposed.
+Private network addresses are blocked on documents, redirects and resources.
+Compressed and decompressed direct responses and rendered HTML are capped at
+8 MiB; direct requests
+time out after 20 seconds and browser reads after 45 seconds. At most two
+browser reads run at once. Browser sessions are limited to 150 requests and a
+40 MiB traffic budget (encrypted bytes for HTTPS). The shared browser closes
+after 30 seconds idle.
+
+Long pages return `content_length` and `next_offset`. Pass that value as
+`offset` with the same URL and render mode to continue. Each response contains
+up to 32,000 characters (12,000 by default). Page snapshots are cached for five
+minutes within the agent so pagination does not repeatedly fetch or render.
+
+For supported API search, set `BRAVE_SEARCH_API_KEY` or `TAVILY_API_KEY` in
+`.env`. Brave is tried first when both exist; Tavily uses advanced search.
+Without a configured or working API, search falls back to DuckDuckGo's public
+results page and reports that fallback. Public search can be rate-limited,
+change format or require a CAPTCHA. The response names its provider and
+reports failures rather than silently presenting them as no matches.
 
 Catalog apps can also expose Python functions as agent tools, executed as
 WebAssembly inside the Go engine. See [Python function tools](docs/python-tools.md)

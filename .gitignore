@@ -3,6 +3,7 @@ dist/
 .env
 pi/models-store.json
 .DS_Store
+/work/
 
 # catalog/ holds runtime apps (built by the agent or by hand); only the
 # shipped example app is checked in. Everything else a self-hoster builds

@@ -94,6 +94,15 @@ Camera capture requires HTTPS or localhost and browser camera permission.
 Existing image-only API clients remain supported. If you run an additional
 reverse proxy, allow request bodies of at least 28 MiB for compatibility.
 
+For a host-level nginx in front of the Docker stack, set `client_max_body_size 28m;`
+inside the existing `server` block for your workbench domain (or its
+`location /api/` block), then run `sudo nginx -t && sudo systemctl reload nginx`.
+The web container's nginx setting cannot raise an outer proxy's limit. A 3.2 MiB
+PDF becomes approximately 4.3 MiB in the base64-encoded JSON upload, before the
+runtime extracts its text with PDF.js. An HTML 413 from nginx means the request
+was rejected before it reached the parser; parser limits return JSON with a
+specific explanation instead.
+
 All agents include `web_search` and `open_page` by default, even without
 installed apps. `open_page` extracts the main content with Mozilla Readability
 and JSDOM, preserving headings, links, code blocks and tables as Markdown.

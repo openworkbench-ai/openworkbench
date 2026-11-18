@@ -3,6 +3,7 @@ import {
   type AgentStreamEvent,
   type ModelInfo,
 } from "./api.js";
+import { apiError } from "./api-error.js";
 
 export type SourceFiles = Record<string, string>;
 import type { WorkspaceMessage } from "../../../../packages/workspace-chat.js";
@@ -161,11 +162,7 @@ export async function streamWorkspaceChat(
           if (res.status === 401)
             window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
           permanentError = ![408, 429, 500, 502, 503, 504].includes(res.status);
-          const error = await res.json().catch(() => ({}));
-          throw new Error(
-            error.error ??
-              `Could not reach the coding partner (${res.status}).`,
-          );
+          throw await apiError(res, `Could not reach the coding partner (${res.status}).`);
         }
         started = true;
         onEvent({ type: "connection", status: "connected" });

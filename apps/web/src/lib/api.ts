@@ -1,3 +1,5 @@
+import { apiError } from "./api-error.js"
+
 export interface AppInfo {
   id: string
   name: string
@@ -237,8 +239,7 @@ async function streamSse(
     signal,
   })
   if (!res.ok || !res.body) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? `Chat request failed (${res.status})`)
+    throw await apiError(res, `Chat request failed (${res.status})`)
   }
 
   const reader = res.body.getReader()

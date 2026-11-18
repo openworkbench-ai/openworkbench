@@ -13,6 +13,7 @@ import {
 } from "../../packages/workspace-chat.js";
 import { streamWorkspaceChat } from "../web/src/lib/workspace-api.js";
 import { AUTO_MODEL_ID, modelChoices } from "./model-selection.js";
+import { textPdf } from "./test-fixtures/pdf.js";
 
 async function fixture(
   t: TestContext,
@@ -145,6 +146,36 @@ test("attachment-only workspace messages are extracted, saved, replayed once, an
   assert.match(await rejected.text(), /Unsupported file type/);
   assert.equal(calls, 1);
   assert.equal(routes.store.require("alice", project.id).messages.length, 2);
+});
+
+test("a 3.2 MiB PDF crosses the upload boundary and only extracted text reaches the agent", async (t) => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  });
+  const marker = "PDF_UPLOAD_3_2_MIB_MARKER";
+  const bytes = textPdf(marker, Math.round(3.2 * 1024 * 1024));
+  const data = Buffer.from(bytes).toString("base64");
+  assert.ok(data.length > 4 * 1024 * 1024);
+  let calls = 0;
+  const { request, routes } = await fixture(t, undefined, { runAgent: async ({ attachments }) => {
+    calls++;
+    assert.equal(attachments?.[0].text?.trim(), marker);
+    assert.equal(attachments?.[0].size, bytes.length);
+    assert.equal(attachments?.[0].image, undefined);
+    assert.ok(!("data" in attachments![0]), "raw PDF bytes must not be sent to the agent");
+  } });
+  const project = await (await request("", "POST", {})).json() as any;
+  const response = await request(`/${project.id}/chat`, "POST", {
+    runId: randomUUID(), version: project.version, modelId: "test", message: "",
+    attachments: [{ name: "large.pdf", mimeType: "application/pdf", size: bytes.length, data }],
+  });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /done/);
+  assert.equal(calls, 1);
+  assert.equal(routes.store.require("alice", project.id).messages[0].attachments?.[0].text?.trim(), marker);
 });
 
 test("clearing chat persists, preserves the app, and stays scoped to its owner", async (t) => {

@@ -3,28 +3,12 @@ import { test } from "node:test";
 import { strToU8, zipSync } from "fflate";
 import { prepareAttachments, AttachmentError } from "./chat-attachments.js";
 import { attachmentContext, MAX_ATTACHMENT_BYTES } from "../../packages/chat-attachments.js";
+import { textPdf as pdf } from "./test-fixtures/pdf.js";
 
 const file = (name: string, content: string | Uint8Array) => ({
   name, mimeType: "application/octet-stream", size: 1,
   data: Buffer.from(content).toString("base64"),
 });
-
-function pdf(text: string): Uint8Array {
-  const stream = `BT /F1 12 Tf 50 750 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-  ];
-  let output = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, i) => { offsets.push(output.length); output += `${i + 1} 0 obj\n${object}\nendobj\n`; });
-  const xref = output.length;
-  output += `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return strToU8(output);
-}
 
 test("extracts text from a real PDF without sending it to an external service", async () => {
   const [result] = await prepareAttachments([file("requirements.pdf", pdf("Build the inventory tracker"))]);

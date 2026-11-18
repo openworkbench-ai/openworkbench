@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage } from "node:http";
-import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -15,11 +14,13 @@ import { createPasswordProvider } from "./password-provider.js";
 import { createUserStore } from "./user-store.js";
 import { createUserRuntimes } from "./user-runtime.js";
 import { createWorkspaceRoutes } from "./workspace-routes.js";
-import { MAX_CHAT_BODY_BYTES, parseChatImages } from "../../packages/chat-images.js";
+import { modelChoices } from "./model-selection.js";
+import { AttachmentError, prepareAttachments } from "./chat-attachments.js";
+import { MAX_CHAT_REQUEST_BYTES } from "../../packages/chat-attachments.js";
+import { parseChatImages } from "../../packages/chat-images.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
-const MODELS_PATH = new URL("../../pi/models.json", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8787);
 const ENGINE_URL = process.env.ENGINE_URL ?? "http://127.0.0.1:8080";
 const AUTH_DB_PATH = process.env.AUTH_DB_PATH ?? new URL("../../data/auth.db", import.meta.url).pathname;
@@ -31,21 +32,6 @@ const ALLOW_SIGNUP = process.env.ALLOW_SIGNUP === "true";
 
 // Swap this to switch agent backends; both must satisfy AgentBackend.
 const createAgentBackend = createPiAgentBackend;
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  reasoning?: boolean;
-  input?: ("text" | "image")[];
-  contextWindow?: number;
-  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
-}
-
-function loadCuratedModels(): ModelInfo[] {
-  const raw = JSON.parse(readFileSync(MODELS_PATH, "utf-8"));
-  const models = raw?.providers?.openrouter?.models ?? [];
-  return models.map((m: ModelInfo) => ({ ...m, id: m.id, name: m.name ?? m.id }));
-}
 
 /** Only catalog (engine-backed) apps go through the registry's active/inactive lifecycle (see engine/adminapi); file-based apps have no such concept and are always "active". */
 function appToDto(app: LoadedApp, statuses: Map<string, string>) {
@@ -129,18 +115,15 @@ async function connectAppMcpClient(server: McpServerConfig): Promise<Client> {
   return client;
 }
 
-function readBody(req: IncomingMessage, maxBytes = MAX_CHAT_BODY_BYTES): Promise<string> {
+function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = "";
     let size = 0;
     req.on("data", (chunk) => {
+      if (size > MAX_CHAT_REQUEST_BYTES) return;
       size += Buffer.byteLength(chunk);
-      if (size > maxBytes) {
-        data = "";
-        reject(Object.assign(new Error("Request body is too large."), { status: 413 }));
-        return;
-      }
-      data += chunk;
+      if (size > MAX_CHAT_REQUEST_BYTES) reject(new AttachmentError("Chat request exceeds 28 MiB.", 413));
+      else data += chunk;
     });
     req.on("end", () => resolve(data));
     req.on("error", reject);
@@ -242,7 +225,7 @@ async function main() {
     root: process.env.WORKSPACES_DIR ?? join(dirname(AUTH_DB_PATH), "workspaces"),
     engineUrl: ENGINE_URL,
     defaultModel: DEFAULT_MODEL_ID,
-    models: loadCuratedModels,
+    models: () => modelChoices("workspace"),
     catalogDirFor(userId, id) { const app = appFor(userId, id); return app?.engine ? app.dir : undefined; },
     async onApplied(userId, id) { ownership.claim(id, userId); await reloadApps(userId); },
   });
@@ -404,7 +387,7 @@ async function main() {
       }
 
       if (req.method === "GET" && url.pathname === "/api/models") {
-        sendJson(res, 200, { models: loadCuratedModels(), current: (await runtime.chat()).getModelId() });
+        sendJson(res, 200, { models: modelChoices("chat"), current: (await runtime.chat()).getModelId() });
         return;
       }
 
@@ -414,6 +397,10 @@ async function main() {
           sendJson(res, 400, { error: "modelId is required" });
           return;
         }
+        if (!modelChoices("chat").some((model) => model.id === modelId)) {
+          sendJson(res, 400, { error: "Unknown model." });
+          return;
+        }
         const backend = await runtime.chat();
         await backend.setModel(modelId);
         sendJson(res, 200, { current: backend.getModelId() });
@@ -421,16 +408,12 @@ async function main() {
       }
 
       if (req.method === "POST" && url.pathname === "/api/chat") {
-        let message: string;
+        const { message = "", attachments: files, images: rawImages } = JSON.parse(await readBody(req));
         let images;
-        try {
-          const body = JSON.parse(await readBody(req));
-          images = parseChatImages(body.images);
-          message = body.message ?? "";
-          if (typeof message !== "string" || (!message.trim() && !images.length) || message.length > 32000)
-            throw new Error("Send a message (up to 32,000 characters) or an image.");
-        } catch (error) {
-          sendJson(res, (error as { status?: number }).status ?? 400, { error: error instanceof Error ? error.message : String(error) });
+        try { images = parseChatImages(rawImages); }
+        catch (error) { throw new AttachmentError(error instanceof Error ? error.message : "Invalid images."); }
+        if (typeof message !== "string" || message.length > 32000 || (!message.trim() && !images.length && !(Array.isArray(files) && files.length))) {
+          sendJson(res, 400, { error: "message is required" });
           return;
         }
         if (runtime.streaming) {
@@ -438,11 +421,11 @@ async function main() {
           return;
         }
 
+        const attachments = await prepareAttachments(files);
+        images.push(...attachments.flatMap((file) => file.image ? [{ name: file.name, ...file.image }] : []));
         const backend = await runtime.chat();
-        if (images.length && !backend.supportsImages?.()) {
-          sendJson(res, 400, { error: "This model does not support images. Choose an image-capable model and try again." });
-          return;
-        }
+        if (images.length && !backend.supportsImages?.()) { throw new AttachmentError("This model does not support images. Choose an image-capable model and try again."); }
+        if (runtime.streaming) { sendJson(res, 409, { error: "the agent is still responding to a previous message" }); return; }
         runtime.streaming = true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
@@ -463,7 +446,7 @@ async function main() {
         try {
           await backend.prompt(message, (event) => {
             if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          }, images);
+          }, images, attachments);
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
@@ -481,7 +464,7 @@ async function main() {
       }
 
       if (req.method === "GET" && url.pathname === "/api/build-chat/models") {
-        sendJson(res, 200, { models: loadCuratedModels(), current: (await runtime.build()).getModelId() });
+        sendJson(res, 200, { models: modelChoices("workspace"), current: (await runtime.build()).getModelId() });
         return;
       }
 
@@ -491,6 +474,10 @@ async function main() {
           sendJson(res, 400, { error: "modelId is required" });
           return;
         }
+        if (!modelChoices("workspace").some((model) => model.id === modelId)) {
+          sendJson(res, 400, { error: "Unknown model." });
+          return;
+        }
         const buildBackend = await runtime.build();
         await buildBackend.setModel(modelId);
         sendJson(res, 200, { current: buildBackend.getModelId() });
@@ -498,8 +485,8 @@ async function main() {
       }
 
       if (req.method === "POST" && url.pathname === "/api/build-chat") {
-        const { message } = JSON.parse(await readBody(req));
-        if (typeof message !== "string" || !message.trim()) {
+        const { message, attachments: files } = JSON.parse(await readBody(req));
+        if (typeof message !== "string" || message.length > 32000 || (!message.trim() && !(Array.isArray(files) && files.length))) {
           sendJson(res, 400, { error: "message is required" });
           return;
         }
@@ -508,7 +495,9 @@ async function main() {
           return;
         }
 
+        const attachments = await prepareAttachments(files);
         const buildBackend = await runtime.build();
+        if (runtime.buildStreaming) { sendJson(res, 409, { error: "the build agent is still responding to a previous message" }); return; }
         runtime.buildStreaming = true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
@@ -529,7 +518,7 @@ async function main() {
         try {
           await buildBackend.prompt(message, (event) => {
             if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          });
+          }, attachments.flatMap((file) => file.image ? [{ name: file.name, ...file.image }] : []), attachments);
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
@@ -601,7 +590,7 @@ async function main() {
 
       sendJson(res, 404, { error: "not found" });
     } catch (error) {
-      sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+      sendJson(res, error instanceof AttachmentError ? error.status : error instanceof SyntaxError ? 400 : 500, { error: error instanceof Error ? error.message : String(error) });
     }
   });
 

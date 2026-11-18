@@ -1,3 +1,5 @@
+import type { PreparedAttachment } from "./chat-attachments.js";
+
 /** Wire events shared by the runtime and browser. */
 export type AgentStreamEvent =
   | { type: "text" | "thinking"; delta: string }
@@ -44,6 +46,7 @@ export interface WorkspaceMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  attachments?: PreparedAttachment[];
   thinking?: string;
   /** Ordered activity for live rendering and reloads. Absent on older transcripts. */
   segments?: WorkspaceMessageSegment[];

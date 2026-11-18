@@ -12,6 +12,7 @@ import {
 import { createWorkspaceStore } from "./workspace-store.js";
 import { starterFiles } from "./workspace-service.js";
 import { runWorkspaceAgent } from "./workspace-agent.js";
+import type { PreparedAttachment } from "../../packages/chat-attachments.js";
 import {
   createWorkspaceChatState,
   reduceWorkspaceChat,
@@ -53,6 +54,9 @@ function reply(
 async function runScript(
   t: TestContext,
   script: (attempt: number) => { message: AssistantMessage; events?: Update[] },
+  modelId = "auto",
+  attachments: PreparedAttachment[] = [],
+  previousAttachments: PreparedAttachment[] = [],
 ) {
   const root = mkdtempSync(join(tmpdir(), "workspace-agent-stream-test-"));
   const oldKey = process.env.OPENROUTER_API_KEY;
@@ -64,7 +68,9 @@ async function runScript(
   });
   const store = createWorkspaceStore(root);
   store.create("alice", "demo", starterFiles("demo", "Demo"));
+  if (previousAttachments.length) store.addMessage("alice", "demo", { id: "previous", role: "user", text: "Reference for later", at: new Date().toISOString(), attachments: previousAttachments });
   let requests = 0;
+  const inputs: Parameters<StreamFunction>[1][] = [];
   const events: AgentStreamEvent[] = [];
   const promise = runWorkspaceAgent(
     {
@@ -72,14 +78,16 @@ async function runScript(
       userId: "alice",
       id: "demo",
       engineUrl: "http://unused",
-      modelId: "anthropic/claude-sonnet-5",
+      modelId,
+      attachments,
       message: "Inspect my app",
       signal: new AbortController().signal,
       onEvent: (event) => events.push(event),
     },
     {
       async createAgentSession(options) {
-        assert.equal(options?.thinkingLevel, "medium");
+        assert.equal(options?.model?.id, modelId === "auto" ? "openai/gpt-6.1-sol" : modelId);
+        assert.equal(options?.thinkingLevel, modelId === "z-ai/glm-5.3-flash" ? "low" : "medium");
         assert.deepEqual(options?.settingsManager?.getRetrySettings(), {
           enabled: true,
           maxRetries: 3,
@@ -91,7 +99,8 @@ async function runScript(
             retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 },
           }),
         });
-        const stream: StreamFunction = () => {
+        const stream: StreamFunction = (_model, context) => {
+          inputs.push(context);
           const response = script(++requests);
           return {
             async *[Symbol.asyncIterator]() {
@@ -117,7 +126,7 @@ async function runScript(
       },
     },
   );
-  return { promise, events, requests: () => requests };
+  return { promise, events, inputs, requests: () => requests };
 }
 
 test("real Pi session streams thinking and tool arguments, retries the failed turn and executes the tool once", async (t) => {
@@ -216,6 +225,31 @@ test("exhausted network retries are surfaced as a failure instead of a false Don
   await assert.rejects(run.promise, /Network error/);
   assert.equal(run.requests(), 4);
   assert.equal(run.events.filter((event) => event.type === "retry").length, 3);
+});
+
+test("manual workspace model choices reach the SDK without Auto overriding them", async (t) => {
+  for (const modelId of ["z-ai/glm-5.3-flash", "minimax/minimax-m3.1-flash", "anthropic/claude-opus-5.5"]) {
+    const run = await runScript(t, () => ({
+      message: reply("stop", [{ type: "text", text: "Selected model is ready." }]),
+    }), modelId);
+    await run.promise;
+    assert.equal(run.requests(), 1);
+  }
+});
+
+test("workspace passes documents and photo bytes to the actual Pi session and retains earlier document context", async (t) => {
+  const photo = { type: "image" as const, mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg1sAAAAASUVORK5CYII=" };
+  const run = await runScript(t, () => ({ message: reply("stop", [{ type: "text", text: "Read the uploaded brief." }]) }), "auto", [
+    { name: "brief.txt", mimeType: "text/plain", size: 20, text: "ATTACHED_BRIEF_MARKER" },
+    { name: "photo.png", mimeType: "image/png", size: 68, image: photo },
+  ], [{ name: "earlier.md", mimeType: "text/markdown", size: 20, text: "EARLIER_DOCUMENT_MARKER" }]);
+  await run.promise;
+  const user = run.inputs[0].messages.find((message) => message.role === "user");
+  assert.ok(user);
+  assert.match(JSON.stringify(user.content), /ATTACHED_BRIEF_MARKER/);
+  assert.match(JSON.stringify(user.content), /EARLIER_DOCUMENT_MARKER/);
+  assert.ok(Array.isArray(user.content));
+  assert.ok(user.content.some((block) => block.type === "image" && block.data === photo.data));
 });
 
 test("permanent provider errors fail immediately", async (t) => {

@@ -15,6 +15,8 @@ import { WorkspaceError, type WorkspaceStore } from "./workspace-store.js";
 import { validateWorkspace } from "./workspace-service.js";
 import type { AgentStreamEvent } from "./agent-backend.js";
 import { createWebTools } from "./web-tools.js";
+import { modelThinkingLevel, resolveModelId } from "./model-selection.js";
+import { attachmentContext, MAX_DOCUMENT_CHARS, type PreparedAttachment } from "../../packages/chat-attachments.js";
 
 /** Translate SDK lifecycle events without exposing transient failures as final errors. */
 export function workspaceAgentEvents(
@@ -251,6 +253,7 @@ export async function runWorkspaceAgent(
     id: string;
     engineUrl: string;
     message: string;
+    attachments?: PreparedAttachment[];
     selectedFile?: string;
     modelId: string;
     signal: AbortSignal;
@@ -264,6 +267,7 @@ export async function runWorkspaceAgent(
     id,
     engineUrl,
     message,
+    attachments = [],
     selectedFile,
     modelId,
     signal,
@@ -286,7 +290,7 @@ export async function runWorkspaceAgent(
       "openrouter",
       process.env.OPENROUTER_API_KEY,
     );
-    const model = modelRuntime.getModel("openrouter", modelId);
+    const model = modelRuntime.getModel("openrouter", resolveModelId(modelId, "workspace"));
     if (!model) {
       throw new WorkspaceError(400, "Unknown model.");
     }
@@ -315,7 +319,7 @@ export async function runWorkspaceAgent(
       resourceLoader,
       modelRuntime,
       model,
-      thinkingLevel: model.reasoning ? "medium" : "off",
+      thinkingLevel: modelThinkingLevel(model.id),
       sessionManager: SessionManager.inMemory(temporary),
       tools: customTools.map((t) => t.name),
       customTools,
@@ -329,13 +333,22 @@ export async function runWorkspaceAgent(
     try {
       if (signal.aborted) throw new Error("Stopped by user.");
       const project = store.require(userId, id);
+      let attachmentBudget = MAX_DOCUMENT_CHARS;
       const history = project.messages
         .slice(0, project.messages.at(-1)?.text === message ? -1 : undefined)
         .slice(-16)
-        .map((m) => `${m.role}: ${m.text.slice(0, 6000)}`)
+        .reverse()
+        .map((m) => {
+          const context = attachmentContext(m.attachments ?? []);
+          const excerpt = context.slice(0, attachmentBudget);
+          attachmentBudget -= excerpt.length;
+          return `${m.role}: ${m.text.slice(0, 6000)}${excerpt ? `\n${excerpt}${excerpt.length < context.length ? "\n[Earlier attachment context truncated.]" : ""}` : ""}`;
+        })
+        .reverse()
         .join("\n\n");
       await session.prompt(
-        `App: ${id}\nSelected file: ${selectedFile ?? "overview"}\nCurrent source paths:\n${Object.keys(project.files).join("\n")}\n\nPrior conversation (context only):\n${history}\n\nCurrent request:\n${message}`,
+        `App: ${id}\nSelected file: ${selectedFile ?? "overview"}\nCurrent source paths:\n${Object.keys(project.files).join("\n")}\n\nPrior conversation (context only):\n${history}\n\nCurrent request:\n${message}\n\n${attachmentContext(attachments)}`,
+        { images: attachments.flatMap((file) => file.image ? [file.image] : []) },
       );
       if (!signal.aborted) events.finish();
     } finally {

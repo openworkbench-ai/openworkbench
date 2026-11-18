@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { Sparkles, Trash2 } from "lucide-react"
+import { attachmentSummary, type PreparedAttachment } from "../../../../packages/chat-attachments"
+import type { ChatImage } from "../../../../packages/chat-images"
+import { ChatImages } from "@/components/ui/chat-images"
+import { useChatAttachments } from "@/hooks/use-chat-attachments"
+import { ChatAttachmentPicker, ChatAttachmentList } from "@/components/ui/chat-attachments"
+import { Trash2 } from "lucide-react"
 
 import { fetchApps, fetchModels, streamChat, switchModel, type AgentStreamEvent, type AppInfo, type ModelInfo } from "@/lib/api"
 import { usePersistedState } from "@/lib/persisted-state"
@@ -17,6 +22,7 @@ import {
 import { Doodle } from "@/components/ui/doodle"
 import {
   PromptInput,
+  PromptInputModel,
   PromptInputSend,
   PromptInputTextarea,
   PromptInputToolbar,
@@ -24,15 +30,12 @@ import {
   Suggestions,
 } from "@/components/ui/prompt-input"
 import { Markdown } from "@/components/ui/markdown"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StreamingCaret } from "@/components/ui/streaming"
 import { Thinking } from "@/components/ui/thinking"
 import { CodeBlock } from "@/components/ui/code-block"
 import { McpAppFrame } from "@/components/ui/mcp-app-frame"
 import { ToolCall, ToolCallArgs, ToolCallPanel } from "@/components/ui/tool-call"
 import { Heading, Muted } from "@/components/ui/typography"
-import { ChatImageControls, ChatImages } from "@/components/ui/chat-images"
-import type { ChatImage } from "../../../../packages/chat-images"
 
 type Segment =
   | { kind: "thinking"; text: string; streaming: boolean; startedAt: number; durationMs?: number }
@@ -50,7 +53,7 @@ type Segment =
   | { kind: "widget"; toolCallId: string; appId: string; resourceUri: string; result: unknown }
 
 type Turn =
-  | { id: string; role: "user"; text: string; images?: ChatImage[] }
+  | { id: string; role: "user"; text: string; attachments?: PreparedAttachment[]; images?: ChatImage[] }
   | {
       id: string
       role: "assistant"
@@ -206,11 +209,8 @@ function AgentPage() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [currentModel, setCurrentModel] = useState<string>("")
   const [apps, setApps] = useState<AppInfo[]>([])
-  const [images, setImages] = useState<ChatImage[]>([])
-  const [readingImages, setReadingImages] = useState(false)
-  const [imageError, setImageError] = useState("")
-  const imageModel = models.find((model) => model.id === currentModel)?.input?.includes("image") ?? false
   const abortRef = useRef<AbortController | null>(null)
+  const uploads = useChatAttachments()
 
   useEffect(() => {
     fetchModels()
@@ -235,20 +235,15 @@ function AgentPage() {
 
   const send = (text: string) => {
     const trimmed = text.trim()
-    if ((!trimmed && !images.length) || streaming || readingImages) return
-    if (images.length && !imageModel) {
-      setImageError("Choose an image-capable model to send these images.")
-      return
-    }
+    if ((!trimmed && !uploads.attachments.length) || streaming || uploads.loading) return
+    const attachments = uploads.attachments
 
-    const submittedImages = images
-    setImages([])
-    setImageError("")
     setDraft("")
+    uploads.clear()
     setStreaming(true)
     setTurns((prev) => [
       ...prev,
-      { id: newId(), role: "user", text: trimmed, images: submittedImages },
+      { id: newId(), role: "user", text: trimmed, attachments: attachments.map((file) => ({ ...attachmentSummary(file), ...(file.mimeType.startsWith("image/") ? { image: { type: "image" as const, data: file.data, mimeType: file.mimeType } } : {}) })) },
       { id: newId(), role: "assistant", segments: [], streaming: true, startedAt: Date.now() },
     ])
 
@@ -270,13 +265,13 @@ function AgentPage() {
         updateLastAssistant((turn) => ({ ...turn, segments: appendEvent(turn.segments, event) }))
       },
       controller.signal,
-      submittedImages,
+      attachments,
     )
       .catch((error) => {
         if (abortRef.current !== controller) return
         if (!controller.signal.aborted) {
           setDraft((value) => value || trimmed)
-          setImages((value) => value.length ? value : submittedImages)
+          uploads.restore(attachments)
         }
         updateLastAssistant((turn) => ({
           ...turn,
@@ -285,9 +280,7 @@ function AgentPage() {
           error: error instanceof Error ? error.message : String(error),
         }))
       })
-      .finally(() => {
-        if (abortRef.current === controller) setStreaming(false)
-      })
+      .finally(() => { if (abortRef.current === controller) setStreaming(false) })
   }
 
   const stop = () => abortRef.current?.abort()
@@ -296,10 +289,9 @@ function AgentPage() {
   const clearChat = () => {
     abortRef.current?.abort()
     abortRef.current = null
+    uploads.clear()
     setStreaming(false)
     setTurns([])
-    setImages([])
-    setImageError("")
   }
 
   return (
@@ -310,32 +302,12 @@ function AgentPage() {
           size="sm"
           pill
           className="h-8 gap-1.5 border border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase text-muted-foreground hover:text-foreground"
-          disabled={turns.length === 0 || readingImages}
+          disabled={turns.length === 0 || uploads.loading}
           onClick={clearChat}
         >
           <Trash2 className="size-3" />
           Clear chat
         </Button>
-        <Select
-          value={currentModel}
-          onValueChange={(value) => {
-            setCurrentModel(value)
-            switchModel(value).catch(() => {})
-          }}
-          disabled={streaming || models.length === 0}
-        >
-          <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase">
-            <Sparkles className="size-3 text-accent" />
-            <SelectValue placeholder="Model" />
-          </SelectTrigger>
-          <SelectContent>
-            {models.map((model) => (
-              <SelectItem key={model.id} value={model.id}>
-                {model.name}{model.input?.includes("image") ? " · Images" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </PageHeader>
 
       <Conversation stickToBottom className="flex-1 px-6 py-6 sm:px-10">
@@ -365,8 +337,9 @@ function AgentPage() {
               <Message key={turn.id} role="user">
                 <MessageAvatar role="user" />
                 <MessageContent role="user">
-                  {turn.images?.length ? <ChatImages images={turn.images} /> : null}
-                  {turn.text ? <p>{turn.text}</p> : null}
+                  <p>{turn.text}</p>
+                  <ChatImages images={turn.images ?? []} />
+                  <ChatAttachmentList files={turn.attachments} />
                 </MessageContent>
               </Message>
             ) : (
@@ -509,7 +482,9 @@ function AgentPage() {
               send(draft)
             }}
           >
-            <ChatImages images={images} onRemove={readingImages || streaming ? undefined : (index) => setImages((value) => value.filter((_, i) => i !== index))} />
+            <ChatAttachmentList files={uploads.attachments} onRemove={uploads.remove} />
+            {uploads.error ? <p role="alert" className="px-2 text-xs text-destructive">{uploads.error}</p> : null}
+            {uploads.loading ? <p role="status" className="px-2 text-xs text-muted-foreground">Reading files…</p> : null}
             <PromptInputTextarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
@@ -517,12 +492,18 @@ function AgentPage() {
               placeholder="Ask your agent anything…"
             />
             <PromptInputToolbar>
-              <ChatImageControls images={images} onChange={setImages} disabled={streaming || readingImages} onBusyChange={setReadingImages} onError={setImageError} />
-              <span className="text-xs text-muted-foreground">{readingImages ? "Reading images…" : images.length ? `${images.length}/4 images` : ""}</span>
-              <PromptInputSend streaming={streaming} onStop={stop} disabled={readingImages || (!draft.trim() && !images.length) || (!!images.length && !imageModel)} />
+              <ChatAttachmentPicker onFiles={(files) => void uploads.addFiles(files)} disabled={streaming || uploads.loading} />
+              <PromptInputModel
+                models={models}
+                value={currentModel}
+                onValueChange={(value) => {
+                  setCurrentModel(value)
+                  switchModel(value).catch(() => {})
+                }}
+                disabled={streaming}
+              />
+              <PromptInputSend streaming={streaming} onStop={stop} disabled={(!draft.trim() && !uploads.attachments.length) || uploads.loading} />
             </PromptInputToolbar>
-            {imageError ? <p role="alert" className="px-2 text-xs text-destructive">{imageError}</p> : null}
-            {images.length && !imageModel ? <p role="status" className="px-2 text-xs text-muted-foreground">Choose a model marked “Images” to send attachments.</p> : null}
           </PromptInput>
 
           {apps.length > 0 ? (

@@ -22,7 +22,7 @@ test("image attachments validate count, type, encoding and decoded size", () => 
   assert.throws(() => parseChatImages([{ ...image, data: oversized }]), /5 MB/);
 });
 
-test("chat forwards image-only and text prompts to the SDK, and rejects text-only models", async (t) => {
+test("chat forwards image-only and text prompts to the SDK, and rejects removed models", async (t) => {
   const oldKey = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = "test-key";
   t.after(() => {
@@ -36,8 +36,8 @@ test("chat forwards image-only and text prompts to the SDK, and rejects text-onl
   assert.deepEqual(prompt.mock.calls[0].arguments, ["", { images: [{ type: "image", data: image.data, mimeType: image.mimeType }] }]);
   await backend.prompt("Hello", () => {});
   assert.deepEqual(prompt.mock.calls[1].arguments, ["Hello", { images: [] }]);
-  const textOnly = await createPiAgentBackend(undefined, "z-ai/glm-5.3");
-  assert.equal(textOnly.supportsImages?.(), false);
-  await assert.rejects(textOnly.prompt("Look at this", () => {}, [image]), /does not support images/);
+  await assert.rejects(createPiAgentBackend(undefined, "z-ai/glm-5.3"), /Unknown model/);
   assert.equal(prompt.mock.callCount(), 2, "unsupported images never reach the SDK");
+  await backend.prompt("Read this", () => {}, [], [{ name: "notes.txt", mimeType: "text/plain", size: 12, text: "Document marker" }]);
+  assert.match(String(prompt.mock.calls[2].arguments[0]), /Document marker/);
 });

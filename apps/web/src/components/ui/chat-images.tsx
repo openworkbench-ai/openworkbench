@@ -98,7 +98,7 @@ export function ChatImageControls({ images, onChange, disabled, onBusyChange, on
   )
 }
 
-function CameraCapture({ onClose, onCapture }: { onClose: () => void; onCapture: (file: File) => void }) {
+export function CameraCapture({ onClose, onCapture }: { onClose: () => void; onCapture: (file: File) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState("")
   const [ready, setReady] = useState(false)

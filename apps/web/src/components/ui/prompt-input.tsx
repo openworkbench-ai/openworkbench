@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { ArrowUp, Square } from "lucide-react"
+import { ArrowUp, ChevronDown, Sparkles, Square } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useAutosizeTextarea } from "@/hooks/use-autosize-textarea"
@@ -70,6 +70,40 @@ function PromptInputToolbar({ className, ...props }: React.ComponentProps<"div">
       className={cn("flex items-center gap-1.5", className)}
       {...props}
     />
+  )
+}
+
+/** Compact model picker beside the send button, matching the workspace composer. */
+function PromptInputModel({
+  models,
+  value,
+  onValueChange,
+  disabled,
+}: {
+  models: { id: string; name: string }[]
+  value: string
+  onValueChange: (value: string) => void
+  disabled?: boolean
+}) {
+  return (
+    <label className="flex min-w-0 max-w-[calc(100%-3rem)] items-center gap-1 rounded-md px-2 text-muted-foreground focus-within:ring-2 focus-within:ring-ring/40">
+      <Sparkles aria-hidden="true" className="size-3 shrink-0" />
+      <select
+        aria-label="Agent model"
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+        disabled={disabled || models.length === 0}
+        className="h-8 min-w-0 max-w-60 appearance-none truncate bg-transparent font-mono text-xs outline-none disabled:opacity-50 [&_option]:bg-card [&_option]:text-foreground"
+      >
+        {models.length === 0 ? <option value="">Model</option> : null}
+        {models.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+          </option>
+        ))}
+      </select>
+      <ChevronDown aria-hidden="true" className="size-2.5 shrink-0" />
+    </label>
   )
 }
 
@@ -166,6 +200,7 @@ export {
   PromptInput,
   PromptInputTextarea,
   PromptInputToolbar,
+  PromptInputModel,
   PromptInputAction,
   PromptInputSend,
   Suggestions,

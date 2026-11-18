@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { ChatAttachment } from "../../../../../packages/chat-attachments";
+import { useChatAttachments } from "@/hooks/use-chat-attachments";
+import { ChatAttachmentPicker, ChatAttachmentList } from "@/components/ui/chat-attachments";
 import {
   ArrowRight,
   ArrowUp,
@@ -206,6 +209,7 @@ function WorkspaceAgentMessage({
       {item.role === "assistant" && (
         <WorkspaceAssistantContent item={item} live={live} openFile={openFile} />
       )}
+      {item.role === "user" && <ChatAttachmentList files={item.attachments} />}
       {item.role === "user" && item.text && (
         <div className="workspace-message-body">
           {item.role === "user" && item.text.length > USER_MESSAGE_PREVIEW_LENGTH ? (
@@ -262,7 +266,7 @@ export function WorkspaceAgentPanel({
   clearing: boolean;
   clearDisabled: boolean;
   onClear: () => void;
-  onSend: (message: string, modelId: string) => void;
+  onSend: (message: string, modelId: string, attachments?: ChatAttachment[]) => void;
   onStop: () => void;
   onClose: () => void;
   openFile: (path: string) => void;
@@ -271,6 +275,7 @@ export function WorkspaceAgentPanel({
 }) {
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState(project.agent.model);
+  const uploads = useChatAttachments();
   const bottom = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -283,9 +288,10 @@ export function WorkspaceAgentPanel({
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [project.messages, transient, retry, reconnecting, streaming]);
   const submit = () => {
-    if (!draft.trim() || streaming || clearing || !project.agent.available) return;
-    onSend(draft.trim(), model);
+    if ((!draft.trim() && !uploads.attachments.length) || streaming || clearing || uploads.loading || !project.agent.available) return;
+    onSend(draft.trim(), model, uploads.attachments);
     setDraft("");
+    uploads.clear();
   };
   const suggestions = selectedFile
     ? [
@@ -466,6 +472,9 @@ export function WorkspaceAgentPanel({
             submit();
           }}
         >
+          <ChatAttachmentList files={uploads.attachments} onRemove={uploads.remove} />
+          {uploads.error && <p role="alert" className="px-3 pt-2 text-xs text-destructive">{uploads.error}</p>}
+          {uploads.loading && <p role="status" className="px-3 pt-2 text-xs text-muted-foreground">Reading files…</p>}
           <textarea
             ref={input}
             aria-label="Instructions for the coding partner"
@@ -490,6 +499,7 @@ export function WorkspaceAgentPanel({
             rows={2}
           />
           <div className="agent-composer-toolbar">
+            <ChatAttachmentPicker onFiles={(files) => void uploads.addFiles(files)} disabled={streaming || clearing || uploads.loading} />
             <label className="agent-model-select">
               <Sparkles size={11} />
               <select
@@ -520,7 +530,7 @@ export function WorkspaceAgentPanel({
                 type="submit"
                 className="agent-send"
                 disabled={
-                  !draft.trim() || !project.agent.available || project.busy || clearing
+                  (!draft.trim() && !uploads.attachments.length) || !project.agent.available || project.busy || clearing || uploads.loading
                 }
                 aria-label="Send instructions"
               >

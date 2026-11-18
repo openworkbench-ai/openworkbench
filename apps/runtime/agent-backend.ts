@@ -1,4 +1,5 @@
 import type { AgentStreamEvent } from "../../packages/workspace-chat.js";
+import type { PreparedAttachment } from "../../packages/chat-attachments.js";
 import type { ChatImage } from "../../packages/chat-images.js";
 export type { AgentStreamEvent } from "../../packages/workspace-chat.js";
 
@@ -35,7 +36,7 @@ export interface AppDraft {
 export type InstallResult = { ok: true; message: string } | { ok: false; status: number; message: string };
 
 export interface AgentBackend {
-  prompt(text: string, onEvent: (event: AgentStreamEvent) => void, images?: ChatImage[]): Promise<void>;
+  prompt(text: string, onEvent: (event: AgentStreamEvent) => void, images?: ChatImage[], attachments?: PreparedAttachment[]): Promise<void>;
   supportsImages?(): boolean;
   setModel(modelId: string): Promise<void>;
   getModelId(): string;

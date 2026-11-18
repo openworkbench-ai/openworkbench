@@ -14,6 +14,7 @@ WORKDIR /app
 COPY apps/runtime apps/runtime
 COPY packages/app-ui-kit packages/app-ui-kit
 COPY packages/workspace-chat.ts packages/workspace-chat.ts
+COPY packages/chat-attachments.ts packages/chat-attachments.ts
 COPY packages/chat-images.ts packages/chat-images.ts
 COPY pi pi
 EXPOSE 8787

@@ -6,6 +6,7 @@ import {
 
 export type SourceFiles = Record<string, string>;
 import type { WorkspaceMessage } from "../../../../packages/workspace-chat.js";
+import type { ChatAttachment } from "../../../../packages/chat-attachments.js";
 export type { WorkspaceMessage } from "../../../../packages/workspace-chat.js";
 export interface WorkspaceRevision {
   id: string;
@@ -113,6 +114,7 @@ export async function streamWorkspaceChat(
     message: string;
     selectedFile?: string;
     modelId: string;
+    attachments?: ChatAttachment[];
   },
   onEvent: (event: AgentStreamEvent) => void,
   signal: AbortSignal,

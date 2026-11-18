@@ -13,9 +13,11 @@ import {
 import { extractUiResource, type AgentBackend, type AppDraft } from "../agent-backend.js";
 import { createBuildTools, readAppBundle, saveAndInstall } from "../build-tools.js";
 import { createWebTools } from "../web-tools.js";
+import { AUTO_MODEL_ID, modelThinkingLevel, resolveModelId } from "../model-selection.js";
+import { attachmentContext } from "../../../packages/chat-attachments.js";
 
 const MODEL_PROVIDER = "openrouter";
-export const DEFAULT_MODEL_ID = "z-ai/glm-5.3-flash";
+export const DEFAULT_MODEL_ID = AUTO_MODEL_ID;
 
 const SYSTEM_PROMPT = readFileSync(
   new URL("../prompts/build-agent.md", import.meta.url),
@@ -57,7 +59,8 @@ export async function createBuildAgentBackend(
   });
   await modelRuntime.setRuntimeApiKey(MODEL_PROVIDER, apiKey);
   let modelId = initialModelId;
-  const model = modelRuntime.getModel(MODEL_PROVIDER, modelId);
+  const model = modelRuntime.getModel(MODEL_PROVIDER, resolveModelId(modelId, "workspace"));
+  if (!model) throw new Error(`Unknown model "${modelId}".`);
 
   const agentDir = getAgentDir();
   const resourceLoader = new DefaultResourceLoader({
@@ -81,6 +84,7 @@ export async function createBuildAgentBackend(
     cwd: workspaceRoot,
     modelRuntime,
     model,
+    thinkingLevel: modelThinkingLevel(model.id),
     resourceLoader,
     // `tools` is an allowlist that also filters customTools (not just
     // built-ins) -- omitting a custom tool here would
@@ -92,7 +96,7 @@ export async function createBuildAgentBackend(
   });
 
   return {
-    async prompt(text, onEvent) {
+    async prompt(text, onEvent, images = [], attachments = []) {
       const unsubscribe = session.subscribe((event) => {
         if (event.type === "message_update") {
           if (event.assistantMessageEvent.type === "text_delta") {
@@ -119,23 +123,20 @@ export async function createBuildAgentBackend(
         }
       });
       try {
-        await session.prompt(text);
+        await session.prompt([text, attachmentContext(attachments)].filter(Boolean).join("\n\n"), {
+          images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })),
+        });
       } finally {
         unsubscribe();
       }
     },
     async setModel(nextModelId) {
-      const nextModel = modelRuntime.getModel(MODEL_PROVIDER, nextModelId);
+      const nextModel = modelRuntime.getModel(MODEL_PROVIDER, resolveModelId(nextModelId, "workspace"));
       if (!nextModel) {
         throw new Error(`Unknown model "${nextModelId}" for provider "${MODEL_PROVIDER}".`);
       }
       await session.setModel(nextModel);
-      // setModel carries the current thinking level forward; a non-reasoning
-      // model forces it to "off", which then silently disables reasoning on
-      // the model being switched to unless we bump it back up here.
-      if (nextModel.reasoning && session.thinkingLevel === "off") {
-        session.setThinkingLevel("medium");
-      }
+      session.setThinkingLevel(modelThinkingLevel(nextModel.id));
       modelId = nextModelId;
     },
     getModelId() {

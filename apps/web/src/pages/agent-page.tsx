@@ -31,6 +31,8 @@ import { CodeBlock } from "@/components/ui/code-block"
 import { McpAppFrame } from "@/components/ui/mcp-app-frame"
 import { ToolCall, ToolCallArgs, ToolCallPanel } from "@/components/ui/tool-call"
 import { Heading, Muted } from "@/components/ui/typography"
+import { ChatImageControls, ChatImages } from "@/components/ui/chat-images"
+import type { ChatImage } from "../../../../packages/chat-images"
 
 type Segment =
   | { kind: "thinking"; text: string; streaming: boolean; startedAt: number; durationMs?: number }
@@ -48,7 +50,7 @@ type Segment =
   | { kind: "widget"; toolCallId: string; appId: string; resourceUri: string; result: unknown }
 
 type Turn =
-  | { id: string; role: "user"; text: string }
+  | { id: string; role: "user"; text: string; images?: ChatImage[] }
   | {
       id: string
       role: "assistant"
@@ -204,6 +206,10 @@ function AgentPage() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [currentModel, setCurrentModel] = useState<string>("")
   const [apps, setApps] = useState<AppInfo[]>([])
+  const [images, setImages] = useState<ChatImage[]>([])
+  const [readingImages, setReadingImages] = useState(false)
+  const [imageError, setImageError] = useState("")
+  const imageModel = models.find((model) => model.id === currentModel)?.input?.includes("image") ?? false
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -229,13 +235,20 @@ function AgentPage() {
 
   const send = (text: string) => {
     const trimmed = text.trim()
-    if (!trimmed || streaming) return
+    if ((!trimmed && !images.length) || streaming || readingImages) return
+    if (images.length && !imageModel) {
+      setImageError("Choose an image-capable model to send these images.")
+      return
+    }
 
+    const submittedImages = images
+    setImages([])
+    setImageError("")
     setDraft("")
     setStreaming(true)
     setTurns((prev) => [
       ...prev,
-      { id: newId(), role: "user", text: trimmed },
+      { id: newId(), role: "user", text: trimmed, images: submittedImages },
       { id: newId(), role: "assistant", segments: [], streaming: true, startedAt: Date.now() },
     ])
 
@@ -245,6 +258,7 @@ function AgentPage() {
     streamChat(
       trimmed,
       (event) => {
+        if (abortRef.current !== controller) return
         if (event.type === "done") {
           updateLastAssistant((turn) => ({ ...turn, streaming: false, finishedAt: Date.now() }))
           return
@@ -256,8 +270,14 @@ function AgentPage() {
         updateLastAssistant((turn) => ({ ...turn, segments: appendEvent(turn.segments, event) }))
       },
       controller.signal,
+      submittedImages,
     )
       .catch((error) => {
+        if (abortRef.current !== controller) return
+        if (!controller.signal.aborted) {
+          setDraft((value) => value || trimmed)
+          setImages((value) => value.length ? value : submittedImages)
+        }
         updateLastAssistant((turn) => ({
           ...turn,
           streaming: false,
@@ -265,7 +285,9 @@ function AgentPage() {
           error: error instanceof Error ? error.message : String(error),
         }))
       })
-      .finally(() => setStreaming(false))
+      .finally(() => {
+        if (abortRef.current === controller) setStreaming(false)
+      })
   }
 
   const stop = () => abortRef.current?.abort()
@@ -273,8 +295,11 @@ function AgentPage() {
   /** Drops the transcript from React state and its sessionStorage mirror -- nothing to undo. */
   const clearChat = () => {
     abortRef.current?.abort()
+    abortRef.current = null
     setStreaming(false)
     setTurns([])
+    setImages([])
+    setImageError("")
   }
 
   return (
@@ -285,7 +310,7 @@ function AgentPage() {
           size="sm"
           pill
           className="h-8 gap-1.5 border border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase text-muted-foreground hover:text-foreground"
-          disabled={turns.length === 0}
+          disabled={turns.length === 0 || readingImages}
           onClick={clearChat}
         >
           <Trash2 className="size-3" />
@@ -306,7 +331,7 @@ function AgentPage() {
           <SelectContent>
             {models.map((model) => (
               <SelectItem key={model.id} value={model.id}>
-                {model.name}
+                {model.name}{model.input?.includes("image") ? " · Images" : ""}
               </SelectItem>
             ))}
           </SelectContent>
@@ -340,7 +365,8 @@ function AgentPage() {
               <Message key={turn.id} role="user">
                 <MessageAvatar role="user" />
                 <MessageContent role="user">
-                  <p>{turn.text}</p>
+                  {turn.images?.length ? <ChatImages images={turn.images} /> : null}
+                  {turn.text ? <p>{turn.text}</p> : null}
                 </MessageContent>
               </Message>
             ) : (
@@ -483,6 +509,7 @@ function AgentPage() {
               send(draft)
             }}
           >
+            <ChatImages images={images} onRemove={readingImages || streaming ? undefined : (index) => setImages((value) => value.filter((_, i) => i !== index))} />
             <PromptInputTextarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
@@ -490,8 +517,12 @@ function AgentPage() {
               placeholder="Ask your agent anything…"
             />
             <PromptInputToolbar>
-              <PromptInputSend streaming={streaming} onStop={stop} disabled={!draft.trim()} />
+              <ChatImageControls images={images} onChange={setImages} disabled={streaming || readingImages} onBusyChange={setReadingImages} onError={setImageError} />
+              <span className="text-xs text-muted-foreground">{readingImages ? "Reading images…" : images.length ? `${images.length}/4 images` : ""}</span>
+              <PromptInputSend streaming={streaming} onStop={stop} disabled={readingImages || (!draft.trim() && !images.length) || (!!images.length && !imageModel)} />
             </PromptInputToolbar>
+            {imageError ? <p role="alert" className="px-2 text-xs text-destructive">{imageError}</p> : null}
+            {images.length && !imageModel ? <p role="status" className="px-2 text-xs text-muted-foreground">Choose a model marked “Images” to send attachments.</p> : null}
           </PromptInput>
 
           {apps.length > 0 ? (

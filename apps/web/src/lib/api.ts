@@ -67,6 +67,7 @@ export interface ModelInfo {
   id: string
   name: string
   reasoning?: boolean
+  input?: ("text" | "image")[]
   contextWindow?: number
   cost?: ModelCost
 }
@@ -217,6 +218,7 @@ export async function switchModel(modelId: string): Promise<{ current: string }>
 }
 
 import type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
+import type { ChatImage } from "../../../../packages/chat-images.js"
 export type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
 
 /** Shared streaming plumbing for both `/chat` and `/build-chat` — same SSE event shape. */
@@ -225,11 +227,12 @@ async function streamSse(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
+  images?: ChatImage[],
 ): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, images }),
     signal,
   })
   if (!res.ok || !res.body) {
@@ -262,8 +265,9 @@ export async function streamChat(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
+  images?: ChatImage[],
 ): Promise<void> {
-  return streamSse("/chat", message, onEvent, signal)
+  return streamSse("/chat", message, onEvent, signal, images)
 }
 
 /** Same as {@link streamChat}, against the build agent's own session. */

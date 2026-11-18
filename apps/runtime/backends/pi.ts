@@ -45,7 +45,14 @@ export async function createPiAgentBackend(
   });
 
   return {
-    async prompt(text, onEvent) {
+    supportsImages() {
+      return session.model?.input.includes("image") ?? false;
+    },
+    async prompt(text, onEvent, images = []) {
+      if (images.length && !session.model?.input.includes("image")) {
+        throw new Error("This model does not support images. Choose an image-capable model and try again.");
+      }
+      let failure: string | undefined;
       const unsubscribe = session.subscribe((event) => {
         if (event.type === "message_update") {
           if (event.assistantMessageEvent.type === "text_delta") {
@@ -53,6 +60,11 @@ export async function createPiAgentBackend(
           } else if (event.assistantMessageEvent.type === "thinking_delta") {
             onEvent({ type: "thinking", delta: event.assistantMessageEvent.delta });
           }
+        } else if (event.type === "message_end" && event.message.role === "assistant") {
+          // Wait for the SDK's retries before reporting a provider failure.
+          failure = event.message.stopReason === "error"
+            ? event.message.errorMessage || "The model request failed."
+            : undefined;
         } else if (event.type === "tool_execution_start") {
           onEvent({ type: "tool_start", toolCallId: event.toolCallId, toolName: event.toolName, args: event.args });
         } else if (event.type === "tool_execution_end") {
@@ -72,7 +84,10 @@ export async function createPiAgentBackend(
         }
       });
       try {
-        await session.prompt(text);
+        await session.prompt(text, {
+          images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })),
+        });
+        if (failure) onEvent({ type: "error", reason: failure });
       } finally {
         unsubscribe();
       }

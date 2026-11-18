@@ -8,6 +8,7 @@
         {
           "id": "anthropic/claude-opus-5-5",
           "name": "Claude Opus 5.5",
+          "input": ["text"],
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1000000,
@@ -17,6 +18,7 @@
         {
           "id": "anthropic/claude-sonnet-5",
           "name": "Claude Sonnet 5",
+          "input": ["text", "image"],
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1000000,
@@ -26,6 +28,7 @@
         {
           "id": "openai/gpt-6-sol",
           "name": "GPT-6 Sol",
+          "input": ["text", "image"],
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1050000,
@@ -35,6 +38,7 @@
         {
           "id": "openai/gpt-6-luna",
           "name": "GPT-6 Luna",
+          "input": ["text", "image"],
           "tier": "cheap",
           "reasoning": true,
           "contextWindow": 1050000,
@@ -44,6 +48,7 @@
         {
           "id": "z-ai/glm-5.3",
           "name": "GLM-5.3",
+          "input": ["text"],
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1310720,
@@ -53,6 +58,7 @@
         {
           "id": "z-ai/glm-5.3-flash",
           "name": "GLM 5.3 Flash",
+          "input": ["text", "image"],
           "tier": "cheap",
           "reasoning": false,
           "contextWindow": 1310720,
@@ -62,6 +68,7 @@
         {
           "id": "qwen/qwen3.8-max",
           "name": "Qwen3.8 Max",
+          "input": ["text"],
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1000000,
@@ -71,6 +78,7 @@
         {
           "id": "google/gemini-3.7-flash",
           "name": "Gemini 3.7 Flash",
+          "input": ["text", "image"],
           "tier": "cheap",
           "reasoning": true,
           "contextWindow": 1048576,
@@ -80,6 +88,7 @@
         {
           "id": "x-ai/grok-4.6",
           "name": "Grok 4.6",
+          "input": ["text", "image"],
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 500000,
@@ -89,6 +98,7 @@
         {
           "id": "moonshotai/kimi-k3",
           "name": "Kimi K3",
+          "input": ["text", "image"],
           "tier": "frontier",
           "reasoning": true,
           "contextWindow": 1048576,
@@ -98,6 +108,7 @@
         {
           "id": "deepseek/deepseek-v4-pro-0813",
           "name": "DeepSeek V4 Pro",
+          "input": ["text"],
           "tier": "balanced",
           "reasoning": true,
           "contextWindow": 1048576,

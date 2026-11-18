@@ -15,6 +15,7 @@ import { createPasswordProvider } from "./password-provider.js";
 import { createUserStore } from "./user-store.js";
 import { createUserRuntimes } from "./user-runtime.js";
 import { createWorkspaceRoutes } from "./workspace-routes.js";
+import { MAX_CHAT_BODY_BYTES, parseChatImages } from "../../packages/chat-images.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
@@ -35,6 +36,7 @@ interface ModelInfo {
   id: string;
   name: string;
   reasoning?: boolean;
+  input?: ("text" | "image")[];
   contextWindow?: number;
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
@@ -127,10 +129,19 @@ async function connectAppMcpClient(server: McpServerConfig): Promise<Client> {
   return client;
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, maxBytes = MAX_CHAT_BODY_BYTES): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = "";
-    req.on("data", (chunk) => (data += chunk));
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += Buffer.byteLength(chunk);
+      if (size > maxBytes) {
+        data = "";
+        reject(Object.assign(new Error("Request body is too large."), { status: 413 }));
+        return;
+      }
+      data += chunk;
+    });
     req.on("end", () => resolve(data));
     req.on("error", reject);
   });
@@ -410,9 +421,16 @@ async function main() {
       }
 
       if (req.method === "POST" && url.pathname === "/api/chat") {
-        const { message } = JSON.parse(await readBody(req));
-        if (typeof message !== "string" || !message.trim()) {
-          sendJson(res, 400, { error: "message is required" });
+        let message: string;
+        let images;
+        try {
+          const body = JSON.parse(await readBody(req));
+          images = parseChatImages(body.images);
+          message = body.message ?? "";
+          if (typeof message !== "string" || (!message.trim() && !images.length) || message.length > 32000)
+            throw new Error("Send a message (up to 32,000 characters) or an image.");
+        } catch (error) {
+          sendJson(res, (error as { status?: number }).status ?? 400, { error: error instanceof Error ? error.message : String(error) });
           return;
         }
         if (runtime.streaming) {
@@ -421,6 +439,10 @@ async function main() {
         }
 
         const backend = await runtime.chat();
+        if (images.length && !backend.supportsImages?.()) {
+          sendJson(res, 400, { error: "This model does not support images. Choose an image-capable model and try again." });
+          return;
+        }
         runtime.streaming = true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
@@ -441,7 +463,7 @@ async function main() {
         try {
           await backend.prompt(message, (event) => {
             if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          });
+          }, images);
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);

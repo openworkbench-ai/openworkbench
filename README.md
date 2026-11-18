@@ -84,6 +84,13 @@ volumes:
 
 ## Apps and capabilities
 
+Agent chat accepts up to four JPEG, PNG, WebP or GIF images per message (5 MB
+each), with or without text. Use the image button to upload or the camera
+button to take a photo, review the previews, then send. Models marked “Images”
+support attachments; the default model supports images. Camera capture requires
+HTTPS or localhost and browser camera permission. If you run an additional
+reverse proxy, allow request bodies of at least 28 MB for image messages.
+
 All agents include `web_search` and `open_page` by default, even without
 installed apps. `open_page` extracts the main content with Mozilla Readability
 and JSDOM, preserving headings, links, code blocks and tables as Markdown.

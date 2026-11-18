@@ -17,7 +17,8 @@ export interface PreparedAttachment extends AttachmentSummary {
 
 export const MAX_ATTACHMENTS = 5;
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-export const MAX_CHAT_REQUEST_BYTES = 16 * 1024 * 1024;
+// Keep accepting existing clients' four base64-encoded 5 MiB photo uploads.
+export const MAX_CHAT_REQUEST_BYTES = 28 * 1024 * 1024;
 export const MAX_DOCUMENT_CHARS = 200_000;
 
 export const ATTACHMENT_TYPES: Record<string, string> = {

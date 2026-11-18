@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { attachmentSummary, type AttachmentSummary } from "../../../../packages/chat-attachments"
+import { attachmentSummary, type PreparedAttachment } from "../../../../packages/chat-attachments"
+import type { ChatImage } from "../../../../packages/chat-images"
+import { ChatImages } from "@/components/ui/chat-images"
 import { useChatAttachments } from "@/hooks/use-chat-attachments"
 import { ChatAttachmentPicker, ChatAttachmentList } from "@/components/ui/chat-attachments"
 import { Trash2 } from "lucide-react"
@@ -51,7 +53,7 @@ type Segment =
   | { kind: "widget"; toolCallId: string; appId: string; resourceUri: string; result: unknown }
 
 type Turn =
-  | { id: string; role: "user"; text: string; attachments?: AttachmentSummary[] }
+  | { id: string; role: "user"; text: string; attachments?: PreparedAttachment[]; images?: ChatImage[] }
   | {
       id: string
       role: "assistant"
@@ -241,7 +243,7 @@ function AgentPage() {
     setStreaming(true)
     setTurns((prev) => [
       ...prev,
-      { id: newId(), role: "user", text: trimmed, attachments: attachments.map(attachmentSummary) },
+      { id: newId(), role: "user", text: trimmed, attachments: attachments.map((file) => ({ ...attachmentSummary(file), ...(file.mimeType.startsWith("image/") ? { image: { type: "image" as const, data: file.data, mimeType: file.mimeType } } : {}) })) },
       { id: newId(), role: "assistant", segments: [], streaming: true, startedAt: Date.now() },
     ])
 
@@ -251,6 +253,7 @@ function AgentPage() {
     streamChat(
       trimmed,
       (event) => {
+        if (abortRef.current !== controller) return
         if (event.type === "done") {
           updateLastAssistant((turn) => ({ ...turn, streaming: false, finishedAt: Date.now() }))
           return
@@ -265,6 +268,11 @@ function AgentPage() {
       attachments,
     )
       .catch((error) => {
+        if (abortRef.current !== controller) return
+        if (!controller.signal.aborted) {
+          setDraft((value) => value || trimmed)
+          uploads.restore(attachments)
+        }
         updateLastAssistant((turn) => ({
           ...turn,
           streaming: false,
@@ -272,7 +280,7 @@ function AgentPage() {
           error: error instanceof Error ? error.message : String(error),
         }))
       })
-      .finally(() => setStreaming(false))
+      .finally(() => { if (abortRef.current === controller) setStreaming(false) })
   }
 
   const stop = () => abortRef.current?.abort()
@@ -280,6 +288,8 @@ function AgentPage() {
   /** Drops the transcript from React state and its sessionStorage mirror -- nothing to undo. */
   const clearChat = () => {
     abortRef.current?.abort()
+    abortRef.current = null
+    uploads.clear()
     setStreaming(false)
     setTurns([])
   }
@@ -292,7 +302,7 @@ function AgentPage() {
           size="sm"
           pill
           className="h-8 gap-1.5 border border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase text-muted-foreground hover:text-foreground"
-          disabled={turns.length === 0}
+          disabled={turns.length === 0 || uploads.loading}
           onClick={clearChat}
         >
           <Trash2 className="size-3" />
@@ -328,6 +338,7 @@ function AgentPage() {
                 <MessageAvatar role="user" />
                 <MessageContent role="user">
                   <p>{turn.text}</p>
+                  <ChatImages images={turn.images ?? []} />
                   <ChatAttachmentList files={turn.attachments} />
                 </MessageContent>
               </Message>

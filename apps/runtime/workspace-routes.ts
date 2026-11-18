@@ -26,7 +26,7 @@ async function readJson(req: IncomingMessage): Promise<any> {
   for await (const chunk of req) {
     size += Buffer.byteLength(chunk);
     if (size > MAX_CHAT_REQUEST_BYTES)
-      throw new WorkspaceError(413, "Workspace request exceeds 16 MiB.");
+      throw new WorkspaceError(413, "Workspace request exceeds 28 MiB.");
     chunks.push(Buffer.from(chunk));
   }
   try {

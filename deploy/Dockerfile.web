@@ -9,6 +9,7 @@ COPY apps/web apps/web
 COPY packages/app-ui-kit packages/app-ui-kit
 COPY packages/workspace-chat.ts packages/workspace-chat.ts
 COPY packages/chat-attachments.ts packages/chat-attachments.ts
+COPY packages/chat-images.ts packages/chat-images.ts
 COPY engine/manifest.schema.json engine/manifest.schema.json
 RUN npm run build -w apps/web
 

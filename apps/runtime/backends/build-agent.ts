@@ -96,7 +96,7 @@ export async function createBuildAgentBackend(
   });
 
   return {
-    async prompt(text, onEvent, attachments = []) {
+    async prompt(text, onEvent, images = [], attachments = []) {
       const unsubscribe = session.subscribe((event) => {
         if (event.type === "message_update") {
           if (event.assistantMessageEvent.type === "text_delta") {
@@ -124,7 +124,7 @@ export async function createBuildAgentBackend(
       });
       try {
         await session.prompt([text, attachmentContext(attachments)].filter(Boolean).join("\n\n"), {
-          images: attachments.flatMap((file) => file.image ? [file.image] : []),
+          images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })),
         });
       } finally {
         unsubscribe();

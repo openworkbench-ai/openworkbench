@@ -67,6 +67,7 @@ export interface ModelInfo {
   id: string
   name: string
   reasoning?: boolean
+  input?: ("text" | "image")[]
   contextWindow?: number
   cost?: ModelCost
 }
@@ -218,6 +219,7 @@ export async function switchModel(modelId: string): Promise<{ current: string }>
 
 import type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
 import type { ChatAttachment } from "../../../../packages/chat-attachments.js"
+import type { ChatImage } from "../../../../packages/chat-images.js"
 export type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
 
 /** Shared streaming plumbing for both `/chat` and `/build-chat` — same SSE event shape. */
@@ -226,12 +228,12 @@ async function streamSse(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
-  attachments?: ChatAttachment[],
+  attachments?: (ChatAttachment | ChatImage)[],
 ): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, attachments }),
+    body: JSON.stringify({ message, attachments: attachments?.filter((file) => "size" in file), images: attachments?.filter((file) => !("size" in file)) }),
     signal,
   })
   if (!res.ok || !res.body) {
@@ -264,7 +266,7 @@ export async function streamChat(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
-  attachments?: ChatAttachment[],
+  attachments?: (ChatAttachment | ChatImage)[],
 ): Promise<void> {
   return streamSse("/chat", message, onEvent, signal, attachments)
 }

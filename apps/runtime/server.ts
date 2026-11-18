@@ -17,6 +17,7 @@ import { createWorkspaceRoutes } from "./workspace-routes.js";
 import { modelChoices } from "./model-selection.js";
 import { AttachmentError, prepareAttachments } from "./chat-attachments.js";
 import { MAX_CHAT_REQUEST_BYTES } from "../../packages/chat-attachments.js";
+import { parseChatImages } from "../../packages/chat-images.js";
 
 const APPS_DIR = new URL("..", import.meta.url).pathname;
 const CATALOG_DIR = new URL("../../catalog", import.meta.url).pathname;
@@ -121,7 +122,7 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("data", (chunk) => {
       if (size > MAX_CHAT_REQUEST_BYTES) return;
       size += Buffer.byteLength(chunk);
-      if (size > MAX_CHAT_REQUEST_BYTES) reject(new AttachmentError("Chat request exceeds 16 MiB.", 413));
+      if (size > MAX_CHAT_REQUEST_BYTES) reject(new AttachmentError("Chat request exceeds 28 MiB.", 413));
       else data += chunk;
     });
     req.on("end", () => resolve(data));
@@ -407,8 +408,11 @@ async function main() {
       }
 
       if (req.method === "POST" && url.pathname === "/api/chat") {
-        const { message, attachments: files } = JSON.parse(await readBody(req));
-        if (typeof message !== "string" || message.length > 32000 || (!message.trim() && !(Array.isArray(files) && files.length))) {
+        const { message = "", attachments: files, images: rawImages } = JSON.parse(await readBody(req));
+        let images;
+        try { images = parseChatImages(rawImages); }
+        catch (error) { throw new AttachmentError(error instanceof Error ? error.message : "Invalid images."); }
+        if (typeof message !== "string" || message.length > 32000 || (!message.trim() && !images.length && !(Array.isArray(files) && files.length))) {
           sendJson(res, 400, { error: "message is required" });
           return;
         }
@@ -418,7 +422,9 @@ async function main() {
         }
 
         const attachments = await prepareAttachments(files);
+        images.push(...attachments.flatMap((file) => file.image ? [{ name: file.name, ...file.image }] : []));
         const backend = await runtime.chat();
+        if (images.length && !backend.supportsImages?.()) { throw new AttachmentError("This model does not support images. Choose an image-capable model and try again."); }
         if (runtime.streaming) { sendJson(res, 409, { error: "the agent is still responding to a previous message" }); return; }
         runtime.streaming = true;
         res.writeHead(200, {
@@ -440,7 +446,7 @@ async function main() {
         try {
           await backend.prompt(message, (event) => {
             if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          }, attachments);
+          }, images, attachments);
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
@@ -512,7 +518,7 @@ async function main() {
         try {
           await buildBackend.prompt(message, (event) => {
             if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          }, attachments);
+          }, attachments.flatMap((file) => file.image ? [{ name: file.name, ...file.image }] : []), attachments);
           if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
@@ -584,7 +590,7 @@ async function main() {
 
       sendJson(res, 404, { error: "not found" });
     } catch (error) {
-      sendJson(res, error instanceof AttachmentError ? error.status : 500, { error: error instanceof Error ? error.message : String(error) });
+      sendJson(res, error instanceof AttachmentError ? error.status : error instanceof SyntaxError ? 400 : 500, { error: error instanceof Error ? error.message : String(error) });
     }
   });
 

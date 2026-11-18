@@ -31,5 +31,5 @@ export function useChatAttachments() {
     } catch (error) { setError(error instanceof Error ? error.message : "Could not read the files."); }
     finally { reading.current = false; setLoading(false); }
   }
-  return { attachments, loading, error, addFiles, remove: (index: number) => setAttachments((files) => files.filter((_, i) => i !== index)), clear: () => { setAttachments([]); setError(""); } };
+  return { attachments, loading, error, addFiles, restore: (files: ChatAttachment[]) => setAttachments((previous) => previous.length ? previous : files), remove: (index: number) => setAttachments((files) => files.filter((_, i) => i !== index)), clear: () => { setAttachments([]); setError(""); } };
 }

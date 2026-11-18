@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react"
+import { attachmentSummary, type AttachmentSummary } from "../../../../packages/chat-attachments"
+import { useChatAttachments } from "@/hooks/use-chat-attachments"
+import { ChatAttachmentPicker, ChatAttachmentList } from "@/components/ui/chat-attachments"
 import { useNavigate } from "react-router-dom"
-import { Sparkles, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 
 import {
   answerBuildQuestions,
@@ -34,12 +37,12 @@ import { Input } from "@/components/ui/input"
 import { Markdown } from "@/components/ui/markdown"
 import {
   PromptInput,
+  PromptInputModel,
   PromptInputSend,
   PromptInputTextarea,
   PromptInputToolbar,
 } from "@/components/ui/prompt-input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StreamingCaret } from "@/components/ui/streaming"
 import { TaskItem, TaskList } from "@/components/ui/task-list"
 import { Thinking } from "@/components/ui/thinking"
@@ -65,7 +68,7 @@ type Segment =
   | { kind: "app-preview"; toolCallId: string; appId: string }
 
 type Turn =
-  | { id: string; role: "user"; text: string }
+  | { id: string; role: "user"; text: string; attachments?: AttachmentSummary[] }
   | {
       id: string
       role: "assistant"
@@ -516,6 +519,7 @@ function BuildPage() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [currentModel, setCurrentModel] = useState<string>("")
   const abortRef = useRef<AbortController | null>(null)
+  const uploads = useChatAttachments()
 
   useEffect(() => {
     fetchBuildModels()
@@ -537,13 +541,15 @@ function BuildPage() {
 
   const send = (text: string) => {
     const trimmed = text.trim()
-    if (!trimmed || streaming) return
+    if ((!trimmed && !uploads.attachments.length) || streaming || uploads.loading) return
+    const attachments = uploads.attachments
 
     setDraft("")
+    uploads.clear()
     setStreaming(true)
     setTurns((prev) => [
       ...prev,
-      { id: newId(), role: "user", text: trimmed },
+      { id: newId(), role: "user", text: trimmed, attachments: attachments.map(attachmentSummary) },
       { id: newId(), role: "assistant", segments: [], streaming: true, startedAt: Date.now() },
     ])
 
@@ -564,6 +570,7 @@ function BuildPage() {
         updateLastAssistant((turn) => ({ ...turn, segments: appendEvent(turn.segments, event) }))
       },
       controller.signal,
+      attachments,
     )
       .catch((error) => {
         updateLastAssistant((turn) => ({
@@ -599,26 +606,6 @@ function BuildPage() {
           <Trash2 className="size-3" />
           Clear chat
         </Button>
-        <Select
-          value={currentModel}
-          onValueChange={(value) => {
-            setCurrentModel(value)
-            switchBuildModel(value).catch(() => {})
-          }}
-          disabled={streaming || models.length === 0}
-        >
-          <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full border-border bg-card px-3 font-mono text-[0.625rem] tracking-[0.12em] uppercase">
-            <Sparkles className="size-3 text-accent" />
-            <SelectValue placeholder="Model" />
-          </SelectTrigger>
-          <SelectContent>
-            {models.map((model) => (
-              <SelectItem key={model.id} value={model.id}>
-                {model.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </PageHeader>
 
       {turns.length === 0 ? (
@@ -640,6 +627,9 @@ function BuildPage() {
                 send(draft)
               }}
             >
+              <ChatAttachmentList files={uploads.attachments} onRemove={uploads.remove} />
+              {uploads.error ? <p role="alert" className="px-2 text-xs text-destructive">{uploads.error}</p> : null}
+              {uploads.loading ? <p role="status" className="px-2 text-xs text-muted-foreground">Reading files…</p> : null}
               <PromptInputTextarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -648,7 +638,17 @@ function BuildPage() {
                 className="min-h-36"
               />
               <PromptInputToolbar>
-                <Button type="submit" className="ml-auto" disabled={!draft.trim() || streaming}>
+                <ChatAttachmentPicker onFiles={(files) => void uploads.addFiles(files)} disabled={streaming || uploads.loading} />
+                <PromptInputModel
+                  models={models}
+                  value={currentModel}
+                  onValueChange={(value) => {
+                    setCurrentModel(value)
+                    switchBuildModel(value).catch(() => {})
+                  }}
+                  disabled={streaming}
+                />
+                <Button type="submit" className="ml-auto" disabled={(!draft.trim() && !uploads.attachments.length) || streaming || uploads.loading}>
                   Build app
                 </Button>
               </PromptInputToolbar>
@@ -665,6 +665,7 @@ function BuildPage() {
                     <MessageAvatar role="user" />
                     <MessageContent role="user">
                       <p>{turn.text}</p>
+                      <ChatAttachmentList files={turn.attachments} />
                     </MessageContent>
                   </Message>
                 ) : (
@@ -802,6 +803,9 @@ function BuildPage() {
                   send(draft)
                 }}
               >
+                <ChatAttachmentList files={uploads.attachments} onRemove={uploads.remove} />
+                {uploads.error ? <p role="alert" className="px-2 text-xs text-destructive">{uploads.error}</p> : null}
+                {uploads.loading ? <p role="status" className="px-2 text-xs text-muted-foreground">Reading files…</p> : null}
                 <PromptInputTextarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -809,7 +813,17 @@ function BuildPage() {
                   placeholder="Reply to the agent…"
                 />
                 <PromptInputToolbar>
-                  <PromptInputSend streaming={streaming} onStop={stop} disabled={!draft.trim()} />
+                  <ChatAttachmentPicker onFiles={(files) => void uploads.addFiles(files)} disabled={streaming || uploads.loading} />
+                  <PromptInputModel
+                    models={models}
+                    value={currentModel}
+                    onValueChange={(value) => {
+                      setCurrentModel(value)
+                      switchBuildModel(value).catch(() => {})
+                    }}
+                    disabled={streaming}
+                  />
+                  <PromptInputSend streaming={streaming} onStop={stop} disabled={(!draft.trim() && !uploads.attachments.length) || uploads.loading} />
                 </PromptInputToolbar>
               </PromptInput>
             </div>

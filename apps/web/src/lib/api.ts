@@ -217,6 +217,7 @@ export async function switchModel(modelId: string): Promise<{ current: string }>
 }
 
 import type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
+import type { ChatAttachment } from "../../../../packages/chat-attachments.js"
 export type { AgentStreamEvent } from "../../../../packages/workspace-chat.js"
 
 /** Shared streaming plumbing for both `/chat` and `/build-chat` — same SSE event shape. */
@@ -225,11 +226,12 @@ async function streamSse(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
+  attachments?: ChatAttachment[],
 ): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, attachments }),
     signal,
   })
   if (!res.ok || !res.body) {
@@ -262,8 +264,9 @@ export async function streamChat(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
+  attachments?: ChatAttachment[],
 ): Promise<void> {
-  return streamSse("/chat", message, onEvent, signal)
+  return streamSse("/chat", message, onEvent, signal, attachments)
 }
 
 /** Same as {@link streamChat}, against the build agent's own session. */
@@ -271,8 +274,9 @@ export async function streamBuildChat(
   message: string,
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
+  attachments?: ChatAttachment[],
 ): Promise<void> {
-  return streamSse("/build-chat", message, onEvent, signal)
+  return streamSse("/build-chat", message, onEvent, signal, attachments)
 }
 
 export interface AskQuestion {

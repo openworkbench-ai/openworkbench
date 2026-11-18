@@ -1,4 +1,5 @@
 import type { AgentStreamEvent } from "../../packages/workspace-chat.js";
+import type { PreparedAttachment } from "../../packages/chat-attachments.js";
 export type { AgentStreamEvent } from "../../packages/workspace-chat.js";
 
 /**
@@ -34,7 +35,7 @@ export interface AppDraft {
 export type InstallResult = { ok: true; message: string } | { ok: false; status: number; message: string };
 
 export interface AgentBackend {
-  prompt(text: string, onEvent: (event: AgentStreamEvent) => void): Promise<void>;
+  prompt(text: string, onEvent: (event: AgentStreamEvent) => void, attachments?: PreparedAttachment[]): Promise<void>;
   setModel(modelId: string): Promise<void>;
   getModelId(): string;
   /** Releases any resources this backend owns (e.g. a scratch workspace directory). Optional — most backends need none. */

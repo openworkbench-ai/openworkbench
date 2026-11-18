@@ -6,9 +6,11 @@ import {
 import { extractUiResource, type AgentBackend } from "../agent-backend.js";
 import type { Capabilities } from "../app-loader.js";
 import { createCapabilityProvider } from "./pi-capabilities.js";
+import { AUTO_MODEL_ID, modelThinkingLevel, resolveModelId } from "../model-selection.js";
+import { attachmentContext } from "../../../packages/chat-attachments.js";
 
 const MODEL_PROVIDER = "openrouter";
-export const DEFAULT_MODEL_ID = "z-ai/glm-5.3-flash";
+export const DEFAULT_MODEL_ID = AUTO_MODEL_ID;
 
 export async function createPiAgentBackend(
   capabilities: Capabilities = { skillPaths: [], mcpServers: [] },
@@ -26,7 +28,8 @@ export async function createPiAgentBackend(
   });
   await modelRuntime.setRuntimeApiKey(MODEL_PROVIDER, apiKey);
   let modelId = initialModelId;
-  const model = modelRuntime.getModel(MODEL_PROVIDER, modelId);
+  const model = modelRuntime.getModel(MODEL_PROVIDER, resolveModelId(modelId, "chat"));
+  if (!model) throw new Error(`Unknown model "${modelId}".`);
 
   const { resourceLoader, tools: customTools } = await createCapabilityProvider(capabilities);
 
@@ -34,6 +37,7 @@ export async function createPiAgentBackend(
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
     model,
+    thinkingLevel: modelThinkingLevel(model.id),
     resourceLoader,
     // This agent converses, researches the web and uses installed apps' MCP tools --
     // never to read/write files or run shell commands. `tools` as an
@@ -45,7 +49,7 @@ export async function createPiAgentBackend(
   });
 
   return {
-    async prompt(text, onEvent) {
+    async prompt(text, onEvent, attachments = []) {
       const unsubscribe = session.subscribe((event) => {
         if (event.type === "message_update") {
           if (event.assistantMessageEvent.type === "text_delta") {
@@ -72,23 +76,20 @@ export async function createPiAgentBackend(
         }
       });
       try {
-        await session.prompt(text);
+        await session.prompt([text, attachmentContext(attachments)].filter(Boolean).join("\n\n"), {
+          images: attachments.flatMap((file) => file.image ? [file.image] : []),
+        });
       } finally {
         unsubscribe();
       }
     },
     async setModel(nextModelId) {
-      const nextModel = modelRuntime.getModel(MODEL_PROVIDER, nextModelId);
+      const nextModel = modelRuntime.getModel(MODEL_PROVIDER, resolveModelId(nextModelId, "chat"));
       if (!nextModel) {
         throw new Error(`Unknown model "${nextModelId}" for provider "${MODEL_PROVIDER}".`);
       }
       await session.setModel(nextModel);
-      // setModel carries the current thinking level forward; a non-reasoning
-      // model forces it to "off", which then silently disables reasoning on
-      // the model being switched to unless we bump it back up here.
-      if (nextModel.reasoning && session.thinkingLevel === "off") {
-        session.setThinkingLevel("medium");
-      }
+      session.setThinkingLevel(modelThinkingLevel(nextModel.id));
       modelId = nextModelId;
     },
     getModelId() {

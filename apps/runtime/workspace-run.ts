@@ -47,6 +47,7 @@ export function createWorkspaceRun(options: RunOptions) {
     id: randomUUID(),
     role: "user",
     text: options.message,
+    ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     at: new Date().toISOString(),
   });
   const deadline = setTimeout(

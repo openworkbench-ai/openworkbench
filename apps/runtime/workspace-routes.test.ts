@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type RequestListener } from "node:http";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import {
   type AgentStreamEvent,
 } from "../../packages/workspace-chat.js";
 import { streamWorkspaceChat } from "../web/src/lib/workspace-api.js";
+import { AUTO_MODEL_ID, modelChoices } from "./model-selection.js";
 
 async function fixture(
   t: TestContext,
@@ -82,6 +84,68 @@ async function readUntil(
   }
   return output;
 }
+
+test("workspace defaults to Auto, accepts each curated choice, and rejects removed models", async (t) => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  });
+  const selected: string[] = [];
+  const { request } = await fixture(t, undefined, {
+    defaultModel: AUTO_MODEL_ID,
+    models: () => modelChoices("workspace"),
+    runAgent: async (options) => { selected.push(options.modelId); },
+  });
+  const project = await (await request("", "POST", {})).json() as any;
+  assert.equal(project.agent.model, AUTO_MODEL_ID);
+  assert.deepEqual(project.agent.models.map((model: { id: string }) => model.id), modelChoices("workspace").map((model) => model.id));
+  for (const modelId of [undefined, ...modelChoices("workspace").map((model) => model.id)]) {
+    const current = await (await request(`/${project.id}`)).json() as any;
+    const response = await request(`/${project.id}/chat`, "POST", { runId: randomUUID(), version: current.version, message: "Inspect the app", modelId });
+    assert.equal(response.status, 200);
+    await response.text();
+    assert.equal(selected.at(-1), modelId ?? AUTO_MODEL_ID);
+  }
+  const current = await (await request(`/${project.id}`)).json() as any;
+  const rejected = await request(`/${project.id}/chat`, "POST", { runId: randomUUID(), version: current.version, message: "Inspect the app", modelId: "anthropic/claude-sonnet-5" });
+  assert.equal(rejected.status, 400);
+  assert.match(await rejected.text(), /Unknown model/);
+});
+
+test("attachment-only workspace messages are extracted, saved, replayed once, and scoped to their owner", async (t) => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  });
+  let calls = 0;
+  const { request, routes } = await fixture(t, undefined, { runAgent: async (options) => {
+    calls++;
+    assert.equal(options.attachments?.[0].text, "Make an inventory tracker.");
+    assert.equal(options.attachments?.[0].mimeType, "text/plain");
+  } });
+  const project = await (await request("", "POST", {})).json() as any;
+  const attachments = [{ name: "brief.txt", mimeType: "application/octet-stream", size: 1, data: Buffer.from("Make an inventory tracker.").toString("base64") }];
+  const body = { runId: randomUUID(), version: project.version, modelId: "test", message: "", attachments };
+  for (let replay = 0; replay < 2; replay++) {
+    const response = await request(`/${project.id}/chat`, "POST", body);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /done/);
+  }
+  assert.equal(calls, 1);
+  const saved = routes.store.require("alice", project.id);
+  assert.equal(saved.messages[0].attachments?.[0].text, "Make an inventory tracker.");
+  assert.deepEqual(saved.files, project.files, "uploads must not become editable app source files");
+  assert.equal((await request(`/${project.id}`, "GET", undefined, "bob")).status, 404);
+  const rejected = await request(`/${project.id}/chat`, "POST", { ...body, runId: randomUUID(), attachments: [{ ...attachments[0], name: "malware.exe" }] });
+  assert.equal(rejected.status, 400);
+  assert.match(await rejected.text(), /Unsupported file type/);
+  assert.equal(calls, 1);
+  assert.equal(routes.store.require("alice", project.id).messages.length, 2);
+});
 
 test("clearing chat persists, preserves the app, and stays scoped to its owner", async (t) => {
   const { request, routes } = await fixture(t);

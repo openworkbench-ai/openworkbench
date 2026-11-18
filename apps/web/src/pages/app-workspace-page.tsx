@@ -1,3 +1,4 @@
+import type { ChatAttachment } from "../../../../packages/chat-attachments";
 import {
   createWorkspaceChatState,
   reduceWorkspaceChat,
@@ -468,10 +469,10 @@ function Workspace({ id }: { id: string }) {
       setFileError((error as Error).message);
     }
   }
-  async function send(message: string, modelId: string, resumeRunId?: string) {
+  async function send(message: string, modelId: string, resumeRunId?: string, attachments?: ChatAttachment[]) {
     if (chatRunning.current || operation) return;
     chatRunning.current = true;
-    setPendingMessage(resumeRunId ? "" : message);
+    setPendingMessage(resumeRunId ? "" : message || attachments?.map((file) => file.name).join(", ") || "");
     setOperationError("");
     setStreaming(true);
     setValidation(null);
@@ -487,6 +488,7 @@ function Workspace({ id }: { id: string }) {
           version: current.version,
           message,
           modelId,
+          attachments,
           selectedFile: view === "code" ? activeFile : undefined,
         },
         (event) => {
@@ -1227,7 +1229,7 @@ function Workspace({ id }: { id: string }) {
               clearing={operation === "clear-chat"}
               clearDisabled={locked}
               onClear={() => void clearChat()}
-              onSend={(message, model) => void send(message, model)}
+              onSend={(message, model, attachments) => void send(message, model, undefined, attachments)}
               onStop={() => abort.current?.abort()}
               onClose={() => setAgentOpen(false)}
               openFile={openFile}

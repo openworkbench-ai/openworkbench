@@ -30,6 +30,20 @@ partner. `/build` redirects to Apps; new apps start in this same workspace.
   results and retry progress stream live. Transient model failures retry up to
   three times with exponential backoff; exhausted and permanent failures are
   saved as errors rather than reported as successful completion.
+- The model picker offers Auto plus GLM 5.3 Flash, GPT-6.1 Sol, Claude Opus 5.5,
+  and MiniMax M3.1 Flash. Auto is selected initially and uses GPT-6.1 Sol for
+  workspace and build tasks; the main chat's Auto uses MiniMax M3.1 Flash.
+  It is a fixed recommendation, with no extra routing request. The picker shows
+  the recommended model next to Auto, and all four models remain selectable.
+- Both chat and workspace composers accept images (JPEG, PNG, WebP, GIF) and
+  documents (PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV, JSON), including messages
+  consisting only of attachments. Up to five files and 10 MiB total are allowed
+  per message. Documents are extracted locally on the runtime and passed as
+  reference text (up to 200,000 characters total); encrypted, unreadable, or
+  scanned PDFs without a text layer show an error rather than silently losing
+  their contents. For scans, upload page images. Workspace transcripts retain
+  extracted document text for follow-up questions; raw Office/PDF files are not
+  added to the app source. Images are passed to the model as image content.
 - Preview compiles a component and renders it in a script-only iframe. Editable
   sample props update its display. The iframe has an opaque origin and a CSP that
   blocks network access; sample inputs never touch live records.

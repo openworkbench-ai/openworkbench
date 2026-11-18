@@ -17,14 +17,16 @@ import {
 } from "./workspace-service.js";
 import { runWorkspaceAgent } from "./workspace-agent.js";
 import { createWorkspaceRun, type WorkspaceRun } from "./workspace-run.js";
+import { AttachmentError, prepareAttachments } from "./chat-attachments.js";
+import { MAX_CHAT_REQUEST_BYTES } from "../../packages/chat-attachments.js";
 
 async function readJson(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += Buffer.byteLength(chunk);
-    if (size > 5 << 20)
-      throw new WorkspaceError(413, "Workspace request exceeds 5 MiB.");
+    if (size > MAX_CHAT_REQUEST_BYTES)
+      throw new WorkspaceError(413, "Workspace request exceeds 16 MiB.");
     chunks.push(Buffer.from(chunk));
   }
   try {
@@ -195,7 +197,7 @@ export function createWorkspaceRoutes(options: {
             );
           if (
             typeof body.message !== "string" ||
-            !body.message.trim() ||
+            (!body.message.trim() && !(Array.isArray(body.attachments) && body.attachments.length)) ||
             body.message.length > 32000
           )
             throw new WorkspaceError(
@@ -208,6 +210,17 @@ export function createWorkspaceRoutes(options: {
               : options.defaultModel;
           if (!options.models().some((model) => model.id === modelId))
             throw new WorkspaceError(400, "Unknown model.");
+          let attachments;
+          try { attachments = await prepareAttachments(body.attachments); }
+          catch (error) {
+            if (error instanceof AttachmentError) throw new WorkspaceError(error.status, error.message);
+            throw error;
+          }
+          // Extraction is asynchronous; recheck the source and run lock before starting.
+          const started = runs.get(runKey);
+          if (started) { started.attach(res, 0, options.chatHeartbeatMs); return true; }
+          store.require(userId, id, body.version);
+          if (busy.has(key)) throw new WorkspaceError(409, "The app is being edited or built. Try again when it finishes.");
           busy.add(key);
           try {
             const run = createWorkspaceRun({
@@ -221,6 +234,7 @@ export function createWorkspaceRoutes(options: {
                   ? body.selectedFile
                   : undefined,
               modelId,
+              attachments,
               runAgent: options.runAgent,
               onFinished() {
                 busy.delete(key);

@@ -48,7 +48,7 @@ Keep the `data/` directory on a persistent volume and back it up.
 npm start -- "What files are in the current directory?"
 ```
 
-The model used is configured in `pi/models.json` (defaults to `z-ai/glm-5.3-flash` via OpenRouter) — swap `id` to any OpenRouter model slug.
+The four selectable OpenRouter models are configured in `pi/models.json`: GLM 5.3 Flash, GPT-6.1 Sol, Claude Opus 5.5, and MiniMax M3.1 Flash. Chat and workspace composers default to **Auto**. Auto uses a fixed recommendation: MiniMax M3.1 Flash for chat and GPT-6.1 Sol for workspace/build tasks. These mappings live in `apps/runtime/model-selection.ts`; Auto does not call a routing model. Manual model choices override Auto. Cost metadata is an estimate in USD per million tokens; provider prices, caching, and time-based discounts can change the actual bill.
 
 ## Deploy with Docker
 

@@ -1727,6 +1727,7 @@
   max-width: calc(100% - 35px);
 }
 .agent-model-select select {
+  min-width: 0;
   font: var(--workspace-text-caption) var(--font-mono);
   background: transparent;
   outline: none;
